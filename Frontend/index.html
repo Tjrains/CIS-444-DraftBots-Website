@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DraftBots</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>DraftBots</h1>
+</header>
+
+<nav>
+  <button class="tab" onclick="openTab('profile')">Profile</button>
+  <button class="tab" onclick="openTab('teams')">Teams</button>
+  <button class="tab" onclick="openTab('bets')">Bets</button>
+  <button class="tab" onclick="openTab('schedule')">Schedule</button>
+</nav>
+
+<main>
+  <section id="profile" class="tab-content">
+    <h2>Profile</h2>
+    <p>User info goes here.</p>
+  </section>
+
+  <section id="teams" class="tab-content">
+    <h2>Teams</h2>
+    <p>Team info goes here.</p>
+  </section>
+
+  <section id="bets" class="tab-content">
+    <h2>Bets</h2>
+    <p>Bets placed will appear here.</p>
+  </section>
+
+  <section id="schedule" class="tab-content active">
+    <h2>Game Schedule</h2>
+    <ul id="gameList"></ul>
+  </section>
+
+  <section id="gameDetails" class="hidden">
+    <button onclick="goBack()">Back</button>
+    <h2 id="gameTitle"></h2>
+    <div id="gameContent"></div>
+  </section>
+</main>
+
+<script src="script.js"></script>
+</body>
+</html>

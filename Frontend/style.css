@@ -1,0 +1,60 @@
+body {
+  background-color: black;
+  color: white;
+  font-family: Arial, sans-serif;
+  margin: 0;
+}
+
+header {
+  text-align: center;
+  padding: 20px;
+  background-color: #111;
+}
+
+nav {
+  display: flex;
+  justify-content: center;
+  background-color: #222;
+}
+
+.tab {
+  padding: 15px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  color: white;
+}
+
+.tab:hover {
+  background-color: #444;
+}
+
+.tab-content {
+  display: none;
+  padding: 20px;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+.hidden {
+  display: none;
+}
+
+/* Schedule list*/
+ul {
+  list-style: none;
+  padding: 0;
+}
+
+/* Game Info*/
+li {
+  padding: 10px;
+  border-bottom: 1px solid #444;
+  cursor: pointer;
+}
+
+li:hover {
+  background-color: #333;
+}
