@@ -57,4 +57,32 @@ function goBack() {
   openTab('schedule');
 }
 
-window.onload = loadGames;
+async function loadProfile() {
+  try {
+    const response = await fetch("users.json")
+    const currentUser = await response.json();
+
+    document.getElementById("username").textContent = currentUser.username;
+    document.getElementById("email").textContent = currentUser.email;
+    document.getElementById("createdAt").textContent = currentUser.createdAt;
+    document.getElementById("status").textContent = currentUser.status;
+    document.getElementById("balance").textContent = currentUser.balance.toFixed(2);
+
+    const transactionList = document.getElementById("transactionList");
+    transactionList.innerHTML = "";
+
+    currentUser.transactions.forEach(tx => {
+      const li = document.createElement("li");
+      li.textContent = `${tx.date} - ${tx.type}: $${tx.amount}`;
+      transactionList.appendChild(li);
+    });
+
+  } catch (err) {
+    console.error("Failed to load user:", err);
+  }
+}
+
+window.onload = () => {
+  loadGames();
+  loadProfile();
+};

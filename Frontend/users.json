@@ -1,0 +1,12 @@
+{
+  "username": "tyler",
+  "email": "tyler@example.com",
+  "createdAt": "2026-04-01",
+  "status": "Active",
+  "balance": 125.5,
+  "transactions": [
+    { "type": "Deposit", "amount": 100, "date": "2026-04-01" },
+    { "type": "Bet - Lakers +5", "amount": -15, "date": "2026-04-05" },
+    { "type": "Win", "amount": 40, "date": "2026-04-05" }
+  ]
+}
