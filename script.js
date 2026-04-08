@@ -8,14 +8,14 @@ const games = [
     id: 1,
     name: "Bot Alpha vs Bot Bravo",
     sport: "Football",
-    status: "Upcoming-test",
+    status: "upcoming",
     bets: ["Bot Alpha -3.5", "Bot Bravo +3.5", "Over 42.5", "Under 42.5"]
   },
   {
     id: 2,
     name: "Bot Charlie vs Bot Delta",
     sport: "Soccer",
-    status: "upcoming",
+    status: "live",
     bets: []
   },
   {
