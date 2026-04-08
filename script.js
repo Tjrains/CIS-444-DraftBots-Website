@@ -15,7 +15,7 @@ const games = [
     id: 2,
     name: "Bot Charlie vs Bot Delta",
     sport: "Soccer",
-    status: "live",
+    status: "upcoming",
     bets: []
   },
   {
