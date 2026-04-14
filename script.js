@@ -156,6 +156,42 @@ function loadTeams() {
 }
 
 // -----------------------------------------------
+// loadBets — fetch user bets and fills the Bets tab
+// -----------------------------------------------
+async function loadBets() {
+  const response = await fetch("bets.json");
+  const data = await response.json();
+
+  const betsList = document.getElementById("betsList");
+  betsList.innerHTML = "";
+
+  if (data.bets.length === 0) {
+    betsList.innerHTML = `<p class="empty-msg">No bets placed yet.</p>`;
+    return;
+  }
+
+  data.bets.forEach(bet => {
+    const div = document.createElement("div");
+    div.className = "bet-card";
+    const isWon = bet.status === "won";
+    const isLost = bet.status === "lost";
+    div.innerHTML = `
+      <div>
+        <span class="game-name">${bet.pick}</span>
+        <span class="game-sport">${bet.game} · ${bet.sport}</span>
+      </div>
+      <div style="text-align:right">
+        <span class="status-pill ${bet.status}">${bet.status}</span>
+        <span class="tx-amount ${isWon ? 'positive' : isLost ? 'negative' : ''}">
+          ${isWon ? '+$' + bet.payout.toFixed(2) : '-$' + bet.amount.toFixed(2)}
+        </span>
+      </div>
+    `;
+    betsList.appendChild(div);
+  });
+}
+
+// -----------------------------------------------
 // loadProfile — fetch user data and fill Profile tab
 // -----------------------------------------------
 async function loadProfile() {
@@ -204,4 +240,5 @@ window.onload = () => {
   loadGames();
   loadTeams();
   loadProfile();
+  loadBets();
 };

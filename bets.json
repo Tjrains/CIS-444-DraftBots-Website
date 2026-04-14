@@ -1,0 +1,48 @@
+{
+  "bets": [
+    {
+      "id": 1,
+      "game": "Bot Alpha vs Bot Bravo",
+      "sport": "Football",
+      "pick": "Bot Alpha -3.5",
+      "amount": 20,
+      "odds": -110,
+      "payout": 38.18,
+      "status": "won",
+      "date": "2026-04-10"
+    },
+    {
+      "id": 2,
+      "game": "Bot Echo vs Bot Foxtrot",
+      "sport": "Boxing",
+      "pick": "Bot Foxtrot +130",
+      "amount": 15,
+      "odds": 130,
+      "payout": 34.50,
+      "status": "lost",
+      "date": "2026-04-11"
+    },
+    {
+      "id": 3,
+      "game": "Bot Golf vs Bot Hotel",
+      "sport": "Curling",
+      "pick": "Bot Golf -2",
+      "amount": 25,
+      "odds": -115,
+      "payout": 46.74,
+      "status": "pending",
+      "date": "2026-04-14"
+    },
+    {
+      "id": 4,
+      "game": "Bot Charlie vs Bot Delta",
+      "sport": "Soccer",
+      "pick": "Over 2.5 Goals",
+      "amount": 10,
+      "odds": -105,
+      "payout": 19.52,
+      "status": "live",
+      "date": "2026-04-14"
+    }
+  ]
+}
