@@ -1,151 +1,176 @@
-// =============================================
-//  DRAFTBOTS — script.js
-// =============================================
-
-// --- Sample game data (replace with real API/DB calls later) ---
-const games = [
-  {
-    id: 1,
-    name: "Bot Alpha vs Bot Bravo",
-    sport: "Football",
-    status: "upcoming",
-    bets: ["Bot Alpha -3.5", "Bot Bravo +3.5", "Over 42.5", "Under 42.5"]
-  },
-  {
-    id: 2,
-    name: "Bot Charlie vs Bot Delta",
-    sport: "Soccer",
-    status: "live",
-    bets: []
-  },
-  {
-    id: 3,
-    name: "Bot Echo vs Bot Foxtrot",
-    sport: "Boxing",
-    status: "upcoming",
-    bets: ["Bot Echo -150", "Bot Foxtrot +130"]
-  },
-  {
-    id: 4,
-    name: "Bot Golf vs Bot Hotel",
-    sport: "Curling",
-    status: "upcoming",
-    bets: ["Bot Golf -2", "Bot Hotel +2"]
-  }
-];
+let games = [];
 
 // --- Sample team data ---
 const teams = [
-  { name: "Bot Alpha",   offense: 88, defense: 74 },
-  { name: "Bot Bravo",   offense: 65, defense: 91 },
+  { name: "Bot Alpha", offense: 88, defense: 74 },
+  { name: "Bot Bravo", offense: 65, defense: 91 },
   { name: "Bot Charlie", offense: 79, defense: 80 },
-  { name: "Bot Delta",   offense: 83, defense: 68 },
-  { name: "Bot Echo",    offense: 92, defense: 55 },
+  { name: "Bot Delta", offense: 83, defense: 68 },
+  { name: "Bot Echo", offense: 92, defense: 55 },
   { name: "Bot Foxtrot", offense: 60, defense: 87 },
-  { name: "Bot Golf",    offense: 71, defense: 76 },
-  { name: "Bot Hotel",   offense: 77, defense: 82 }
+  { name: "Bot Golf", offense: 71, defense: 76 },
+  { name: "Bot Hotel", offense: 77, defense: 82 }
 ];
 
-// Tracks which tab nav button is active
-let activeTabBtn = null;
+const isLocal =
+  window.location.hostname === "localhost" &&
+  window.location.port === "8000";
 
-// -----------------------------------------------
-// openTab — switch between main sections
-// -----------------------------------------------
 function openTab(tabId, btnElement) {
-  // Hide all tab sections
-  document.querySelectorAll('.tab-content').forEach(section => {
-    section.classList.remove('active');
+  document.querySelectorAll(".tab-content").forEach(section => {
+    section.classList.remove("active");
   });
 
-  // Show the selected section
-  document.getElementById(tabId).classList.add('active');
+  const selected = document.getElementById(tabId);
+  if (selected) selected.classList.add("active");
 
-  // Make sure game details stays hidden when switching tabs
-  document.getElementById('gameDetails').classList.add('hidden');
+  const gameDetails = document.getElementById("gameDetails");
+  if (gameDetails && tabId !== "gameDetails") {
+    gameDetails.classList.add("hidden");
+    gameDetails.classList.remove("active");
+  }
 
-  // Update the active nav button styling
-  document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
-  if (btnElement) btnElement.classList.add('active');
+  document.querySelectorAll(".tab").forEach(btn => btn.classList.remove("active"));
+  if (btnElement) btnElement.classList.add("active");
 }
 
-// -----------------------------------------------
-// loadGames — build game cards in the Schedule tab
-// -----------------------------------------------
-function loadGames() {
-  const gameList = document.getElementById('gameList');
-  gameList.innerHTML = '';
+async function getProfileData() {
+  const response = isLocal
+    ? await fetch("http://localhost:3000/api/profile")
+    : await fetch("users.json");
 
-  games.forEach(game => {
-    const card = document.createElement('div');
-    card.className = 'game-card';
-    card.onclick = () => showGame(game);
-
-    card.innerHTML = `
-      <div class="game-card-left">
-        <span class="game-name">${game.name}</span>
-        <span class="game-sport">${game.sport}</span>
-      </div>
-      <span class="status-pill ${game.status}">${game.status}</span>
-    `;
-
-    gameList.appendChild(card);
-  });
+  if (!response.ok) throw new Error("Failed to load profile");
+  return await response.json();
 }
 
-// -----------------------------------------------
-// showGame — display details/bets for a single game
-// -----------------------------------------------
+async function getBetsData() {
+  if (isLocal) {
+    const response = await fetch("http://localhost:3000/api/bets");
+    if (!response.ok) throw new Error("Failed to load bets");
+    return await response.json();
+  } else {
+    const response = await fetch("bets.json");
+    if (!response.ok) throw new Error("Failed to load bets.json");
+    const data = await response.json();
+    return data.bets || [];
+  }
+}
+
+async function getGamesData() {
+  if (isLocal) {
+    const response = await fetch("http://localhost:3000/api/games");
+    if (!response.ok) throw new Error("Failed to load games");
+    return await response.json();
+  } else {
+    return [
+      {
+        id: 1,
+        name: "Bot Alpha vs Bot Bravo",
+        sport: "Football",
+        status: "upcoming",
+        bets: ["Bot Alpha -3.5", "Bot Bravo +3.5", "Over 42.5", "Under 42.5"]
+      },
+      {
+        id: 2,
+        name: "Bot Charlie vs Bot Delta",
+        sport: "Soccer",
+        status: "live",
+        bets: []
+      }
+    ];
+  }
+}
+
+async function loadGames() {
+  const gameList = document.getElementById("gameList");
+  if (!gameList) return;
+
+  gameList.innerHTML = "";
+
+  try {
+    games = await getGamesData();
+
+    games.forEach(game => {
+      const card = document.createElement("div");
+      card.className = "game-card";
+      card.onclick = () => showGame(game);
+
+      card.innerHTML = `
+        <div class="game-card-left">
+          <span class="game-name">${game.name}</span>
+          <span class="game-sport">${game.sport || ""}</span>
+        </div>
+        <span class="status-pill ${game.status}">${game.status}</span>
+      `;
+
+      gameList.appendChild(card);
+    });
+  } catch (err) {
+    console.error("Failed to load games:", err);
+    gameList.innerHTML = `<p class="empty-msg">Could not load games.</p>`;
+  }
+}
+
 function showGame(game) {
-  // Hide all sections, show the game details section
-  document.querySelectorAll('.tab-content').forEach(s => s.classList.remove('active'));
-  document.getElementById('gameDetails').classList.remove('hidden');
-  document.getElementById('gameDetails').classList.add('active');
+  document.querySelectorAll(".tab-content").forEach(section => {
+    section.classList.remove("active");
+  });
 
-  document.getElementById('gameTitle').textContent = game.name;
+  const gameDetails = document.getElementById("gameDetails");
+  if (!gameDetails) return;
 
-  const content = document.getElementById('gameContent');
-  content.innerHTML = '';
+  gameDetails.classList.remove("hidden");
+  gameDetails.classList.add("active");
+
+  const title = document.getElementById("gameTitle");
+  const content = document.getElementById("gameContent");
+
+  if (title) title.textContent = game.name;
+  if (!content) return;
+
+  content.innerHTML = "";
 
   if (game.status === "upcoming") {
     content.innerHTML = `<h3>Available Bets</h3>`;
     game.bets.forEach(bet => {
-      const div = document.createElement('div');
-      div.className = 'bet-option';
+      const div = document.createElement("div");
+      div.className = "bet-option";
       div.innerHTML = `<span>${bet}</span><span class="bet-arrow">+</span>`;
       content.appendChild(div);
     });
   } else {
     content.innerHTML = `
       <h3>🔴 Game is Live!</h3>
-      <p style="color: var(--text-muted);">Live gameplay display coming soon.</p>
+      <p style="color: var(--muted);">Live gameplay display coming soon.</p>
     `;
   }
 }
 
-// -----------------------------------------------
-// goBack — return from game details to schedule
-// -----------------------------------------------
 function goBack() {
-  document.getElementById('gameDetails').classList.add('hidden');
-  document.getElementById('gameDetails').classList.remove('active');
+  const gameDetails = document.getElementById("gameDetails");
+  const schedule = document.getElementById("schedule");
 
-  // Re-show schedule and reset the nav button
-  document.getElementById('schedule').classList.add('active');
-  document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
-  document.querySelectorAll('.tab')[0].classList.add('active'); // first tab = schedule
+  if (gameDetails) {
+    gameDetails.classList.add("hidden");
+    gameDetails.classList.remove("active");
+  }
+
+  if (schedule) schedule.classList.add("active");
+
+  document.querySelectorAll(".tab").forEach(btn => btn.classList.remove("active"));
+  const firstTab = document.querySelectorAll(".tab")[0];
+  if (firstTab) firstTab.classList.add("active");
 }
 
-// -----------------------------------------------
-// loadTeams — build team cards in the Teams tab
-// -----------------------------------------------
 function loadTeams() {
-  const teamGrid = document.getElementById('teamGrid');
-  teamGrid.innerHTML = '';
+  const teamGrid = document.getElementById("teamGrid");
+  if (!teamGrid) return;
+
+  teamGrid.innerHTML = "";
 
   teams.forEach(team => {
-    const card = document.createElement('div');
-    card.className = 'team-card';
+    const card = document.createElement("div");
+    card.className = "team-card";
     card.innerHTML = `
       <h3>${team.name}</h3>
       <p class="team-stat">Offense: <span>${team.offense}</span></p>
@@ -155,87 +180,91 @@ function loadTeams() {
   });
 }
 
-// -----------------------------------------------
-// loadBets — fetch user bets and fills the Bets tab
-// -----------------------------------------------
 async function loadBets() {
-  const response = await fetch("bets.json");
-  const data = await response.json();
-
   const betsList = document.getElementById("betsList");
-  betsList.innerHTML = "";
+  if (!betsList) return;
 
-  if (data.bets.length === 0) {
-    betsList.innerHTML = `<p class="empty-msg">No bets placed yet.</p>`;
-    return;
+  try {
+    const data = await getBetsData();
+    betsList.innerHTML = "";
+
+    if (!data || data.length === 0) {
+      betsList.innerHTML = `<p class="empty-msg">No bets placed yet.</p>`;
+      return;
+    }
+
+    data.forEach(bet => {
+      const div = document.createElement("div");
+      div.className = "bet-card";
+
+      const isWon = bet.status === "won";
+      const isLost = bet.status === "lost";
+      const amountText = isWon
+        ? `+$${Number(bet.payout).toFixed(2)}`
+        : `-$${Number(bet.amount).toFixed(2)}`;
+
+      div.innerHTML = `
+        <div>
+          <span class="game-name">${bet.pick}</span>
+          <span class="game-sport">${bet.game} · ${bet.sport}</span>
+        </div>
+        <div style="text-align:right">
+          <span class="status-pill ${bet.status}">${bet.status}</span>
+          <span class="tx-amount ${isWon ? "positive" : isLost ? "negative" : ""}">
+            ${amountText}
+          </span>
+        </div>
+      `;
+      betsList.appendChild(div);
+    });
+  } catch (err) {
+    console.error("Failed to load bets:", err);
+    betsList.innerHTML = `<p class="empty-msg">Could not load bets.</p>`;
   }
-
-  data.bets.forEach(bet => {
-    const div = document.createElement("div");
-    div.className = "bet-card";
-    const isWon = bet.status === "won";
-    const isLost = bet.status === "lost";
-    div.innerHTML = `
-      <div>
-        <span class="game-name">${bet.pick}</span>
-        <span class="game-sport">${bet.game} · ${bet.sport}</span>
-      </div>
-      <div style="text-align:right">
-        <span class="status-pill ${bet.status}">${bet.status}</span>
-        <span class="tx-amount ${isWon ? 'positive' : isLost ? 'negative' : ''}">
-          ${isWon ? '+$' + bet.payout.toFixed(2) : '-$' + bet.amount.toFixed(2)}
-        </span>
-      </div>
-    `;
-    betsList.appendChild(div);
-  });
 }
 
-// -----------------------------------------------
-// loadProfile — fetch user data and fill Profile tab
-// -----------------------------------------------
 async function loadProfile() {
   try {
-    const response = await fetch("users.json");
-    const user = await response.json();
+    const user = await getProfileData();
 
-    // Fill in profile fields
-    document.getElementById("username").textContent = user.username;
-    document.getElementById("email").textContent = user.email;
-    document.getElementById("createdAt").textContent = user.createdAt;
-    document.getElementById("status").textContent = user.status;
-    document.getElementById("balance").textContent = "$" + user.balance.toFixed(2);
-
-    // Set avatar to first letter of username
-    document.getElementById("avatarInitial").textContent = user.username.charAt(0).toUpperCase();
-
-    // Update header balance
-    document.getElementById("headerBalance").textContent = "Balance: $" + user.balance.toFixed(2);
-
-    // Build transaction list
+    const username = document.getElementById("username");
+    const email = document.getElementById("email");
+    const createdAt = document.getElementById("createdAt");
+    const status = document.getElementById("status");
+    const balance = document.getElementById("balance");
+    const avatarInitial = document.getElementById("avatarInitial");
+    const headerBalance = document.getElementById("headerBalance");
     const list = document.getElementById("transactionList");
-    list.innerHTML = "";
-    user.transactions.forEach(tx => {
-      const li = document.createElement("li");
-      const isPositive = tx.amount >= 0;
-      li.innerHTML = `
-        <span>${tx.type}</span>
-        <span class="tx-date">${tx.date}</span>
-        <span class="tx-amount ${isPositive ? 'positive' : 'negative'}">
-          ${isPositive ? '+' : ''}$${Math.abs(tx.amount).toFixed(2)}
-        </span>
-      `;
-      list.appendChild(li);
-    });
 
+    if (username) username.textContent = user.username ?? "Unknown";
+    if (email) email.textContent = user.email ?? "";
+    if (createdAt) createdAt.textContent = user.createdAt ?? "—";
+    if (status) status.textContent = user.status ?? "";
+    if (balance) balance.textContent = `$${Number(user.balance || 0).toFixed(2)}`;
+    if (avatarInitial) avatarInitial.textContent = (user.username || "?").charAt(0).toUpperCase();
+    if (headerBalance) headerBalance.textContent = `Balance: $${Number(user.balance || 0).toFixed(2)}`;
+
+    if (list) {
+      list.innerHTML = "";
+      (user.transactions || []).forEach(tx => {
+        const li = document.createElement("li");
+        const isPositive = Number(tx.amount) >= 0;
+
+        li.innerHTML = `
+          <span>${tx.type}</span>
+          <span class="tx-date">${tx.date || ""}</span>
+          <span class="tx-amount ${isPositive ? "positive" : "negative"}">
+            ${isPositive ? "+" : ""}$${Math.abs(Number(tx.amount || 0)).toFixed(2)}
+          </span>
+        `;
+        list.appendChild(li);
+      });
+    }
   } catch (err) {
-    console.error("Failed to load user profile:", err);
+    console.error("Failed to load profile:", err);
   }
 }
 
-// -----------------------------------------------
-// Init — run on page load
-// -----------------------------------------------
 window.onload = () => {
   loadGames();
   loadTeams();

@@ -176,3 +176,40 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 .tx-date { color: var(--muted); font-size: 12px; }
 .tx-amount.positive { color: var(--green); font-weight: 600; }
 .tx-amount.negative { color: var(--red); font-weight: 600; }
+
+/* === BETS === */
+.bet-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 12px;
+}
+
+.bet-card:hover {
+  border-color: var(--accent);
+}
+
+.bet-card > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.bet-card > div:last-child {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+#betsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
