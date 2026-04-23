@@ -1,3 +1,11 @@
+// AUTH GUARD — redirect to login if not logged in
+// This runs immediately when the script loads
+(function checkAuth() {
+  if (!sessionStorage.getItem('loggedIn')) {
+    window.location.href = 'login.html';
+  }
+})();
+
 let games = [];
 
 // --- Sample team data ---
@@ -263,6 +271,13 @@ async function loadProfile() {
   } catch (err) {
     console.error("Failed to load profile:", err);
   }
+}
+
+//ADDING LOGOUT FUNCITON
+function logout() {
+  sessionStorage.removeItem('loggedIn');
+  sessionStorage.removeItem('username');
+  window.location.href = 'login.html';
 }
 
 window.onload = () => {

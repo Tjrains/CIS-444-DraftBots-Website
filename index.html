@@ -12,12 +12,24 @@
 <body>
 
   <header>
-    <div class="logo">
-      <span class="logo-icon">✓✓</span>
-      <span class="logo-text">DraftBots</span>
-    </div>
+  <div class="logo">
+    <span class="logo-icon">✓✓</span>
+    <span class="logo-text">DraftBots</span>
+  </div>
+  <div style="display: flex; align-items: center; gap: 20px;">
     <div class="header-balance" id="headerBalance">Balance: $0.00</div>
-  </header>
+    <button onclick="logout()" style="
+      background: none;
+      border: 1px solid #2a3040;
+      color: #7a8499;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-family: 'Barlow', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+    ">Log Out</button>
+  </div>
+</header>
 
   <nav>
     <button class="tab active" onclick="openTab('schedule', this)">Schedule</button>

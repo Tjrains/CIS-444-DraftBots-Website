@@ -1,5 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
+const crypto = require('crypto');
+function hashPassword(p) { return crypto.createHash('sha1').update(p).digest('hex'); }
 
 const dbPath = path.join(__dirname, 'draftbots.db');
 const db = new sqlite3.Database(dbPath);
@@ -17,7 +19,8 @@ db.serialize(() => {
       email TEXT NOT NULL,
       created_at TEXT NOT NULL,
       status TEXT NOT NULL,
-      balance REAL NOT NULL
+      balance REAL NOT NULL,
+      password TEXT NOT NULL
     )
   `);
 
@@ -59,9 +62,9 @@ db.serialize(() => {
   `);
 
   db.run(
-    `INSERT INTO users (id, username, email, created_at, status, balance)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [1, 'tyler', 'tyler@example.com', '2026-04-01', 'Active', 125.5]
+    `INSERT INTO users (id, username, email, created_at, status, balance, password)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [1, 'tyler', 'tyler@example.com', '2026-04-01', 'Active', 125.5, hashPassword('password123')]
   );
 
   const transactions = [

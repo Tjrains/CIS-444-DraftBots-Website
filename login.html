@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DraftBots – Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* Reuse the same color variables as style.css */
+    :root {
+      --bg:     #0d0f14;
+      --card:   #14181f;
+      --border: #2a3040;
+      --accent: #1e7fcb;
+      --text:   #e8eaf0;
+      --muted:  #7a8499;
+      --green:  #2ecc71;
+      --red:    #e74c3c;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Barlow', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Logo at the top */
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+    .logo-icon { color: var(--accent); font-weight: 700; font-size: 20px; }
+    .logo-text {
+      font-family: 'Barlow Condensed', sans-serif;
+      font-size: 28px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* The white card box */
+    .auth-card {
+      background-color: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 32px;
+      width: 100%;
+      max-width: 400px;
+    }
+
+    /* Login / Register toggle buttons at the top of the card */
+    .auth-tabs {
+      display: flex;
+      margin-bottom: 24px;
+      border-bottom: 2px solid var(--border);
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 10px;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      color: var(--muted);
+      font-family: 'Barlow', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      cursor: pointer;
+      margin-bottom: -2px;
+    }
+    .auth-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* Each form (login / register) */
+    .auth-form { display: none; flex-direction: column; gap: 16px; }
+    .auth-form.active { display: flex; }
+
+    label {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 14px;
+      background-color: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: 'Barlow', sans-serif;
+      font-size: 15px;
+    }
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 12px;
+      background-color: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-family: 'Barlow', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+    .submit-btn:hover { opacity: 0.9; }
+
+    /* Error and success messages shown under the button */
+    .msg {
+      font-size: 13px;
+      text-align: center;
+      padding: 8px;
+      border-radius: 6px;
+      display: none; /* hidden by default, shown via JS */
+    }
+    .msg.error   { color: var(--red);   background-color: rgba(231,76,60,0.1);  border: 1px solid var(--red); }
+    .msg.success { color: var(--green); background-color: rgba(46,204,113,0.1); border: 1px solid var(--green); }
+  </style>
+</head>
+<body>
+
+  <div class="logo">
+    <span class="logo-icon">✓✓</span>
+    <span class="logo-text">DraftBots</span>
+  </div>
+
+  <div class="auth-card">
+
+    <!-- Tab switcher -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login', this)">Login</button>
+      <button class="auth-tab"        onclick="switchTab('register', this)">Register</button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <div id="loginForm" class="auth-form active">
+      <div>
+        <label for="loginUsername">Username</label>
+        <input type="text" id="loginUsername" placeholder="Enter your username">
+      </div>
+      <div>
+        <label for="loginPassword">Password</label>
+        <input type="password" id="loginPassword" placeholder="Enter your password">
+      </div>
+      <button class="submit-btn" onclick="handleLogin()">Log In</button>
+      <p class="msg" id="loginMsg"></p>
+    </div>
+
+    <!-- REGISTER FORM -->
+    <div id="registerForm" class="auth-form">
+      <div>
+        <label for="regUsername">Username</label>
+        <input type="text" id="regUsername" placeholder="Choose a username">
+      </div>
+      <div>
+        <label for="regEmail">Email</label>
+        <input type="email" id="regEmail" placeholder="Enter your email">
+      </div>
+      <div>
+        <label for="regPassword">Password</label>
+        <input type="password" id="regPassword" placeholder="Choose a password">
+      </div>
+      <button class="submit-btn" onclick="handleRegister()">Create Account</button>
+      <p class="msg" id="registerMsg"></p>
+    </div>
+
+  </div>
+
+  <script>
+    const API = "http://localhost:3000";
+
+    // Switch between the Login and Register tabs
+    function switchTab(tab, btn) {
+      document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+      document.querySelectorAll('.auth-tab').forEach(b => b.classList.remove('active'));
+      document.getElementById(tab + 'Form').classList.add('active');
+      btn.classList.add('active');
+    }
+
+    // Show a message (error or success) under the form
+    function showMsg(id, text, type) {
+      const el = document.getElementById(id);
+      el.textContent = text;
+      el.className = 'msg ' + type;
+      el.style.display = 'block';
+    }
+
+    // Handle Login button click
+    async function handleLogin() {
+      const username = document.getElementById('loginUsername').value.trim();
+      const password = document.getElementById('loginPassword').value;
+
+      if (!username || !password) {
+        showMsg('loginMsg', 'Please fill in all fields.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          // Save login state in sessionStorage so index.html knows we're logged in
+          sessionStorage.setItem('loggedIn', 'true');
+          sessionStorage.setItem('username', data.username);
+          // Redirect to the main app
+          window.location.href = 'index.html';
+        } else {
+          showMsg('loginMsg', data.error || 'Login failed.', 'error');
+        }
+      } catch (err) {
+        showMsg('loginMsg', 'Could not connect to server.', 'error');
+      }
+    }
+
+    // Handle Register button click
+    async function handleRegister() {
+      const username = document.getElementById('regUsername').value.trim();
+      const email    = document.getElementById('regEmail').value.trim();
+      const password = document.getElementById('regPassword').value;
+
+      if (!username || !email || !password) {
+        showMsg('registerMsg', 'Please fill in all fields.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API}/api/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          showMsg('registerMsg', 'Account created! Redirecting to login...', 'success');
+          // Wait 1.5 seconds then switch to the login tab
+          setTimeout(() => switchTab('login', document.querySelectorAll('.auth-tab')[0]), 1500);
+        } else {
+          showMsg('registerMsg', data.error || 'Registration failed.', 'error');
+        }
+      } catch (err) {
+        showMsg('registerMsg', 'Could not connect to server.', 'error');
+      }
+    }
+  </script>
+
+</body>
+</html>
