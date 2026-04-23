@@ -24,10 +24,17 @@ app.get('/', (req, res) => {
 
 // PROFILE
 app.get('/api/profile', (req, res) => {
+  const { username } = req.query; // reads ?username=whoever from the URL
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required.' });
+  }
+
   db.get(
     `SELECT id, username, email, created_at, status, balance
      FROM users
-     WHERE id = 1`,
+     WHERE username = ?`,
+    [username],
     (err, user) => {
       if (err) {
         console.error(err);
@@ -66,11 +73,19 @@ app.get('/api/profile', (req, res) => {
 
 // BETS
 app.get('/api/bets', (req, res) => {
+  const { username } = req.query;
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required.' });
+  }
+
   db.all(
-    `SELECT id, game, sport, pick, amount, odds, payout, status, date
-     FROM bets
-     WHERE user_id = 1
-     ORDER BY id DESC`,
+    `SELECT b.id, b.game, b.sport, b.pick, b.amount, b.odds, b.payout, b.status, b.date
+     FROM bets b
+     JOIN users u ON b.user_id = u.id
+     WHERE u.username = ?
+     ORDER BY b.id DESC`,
+    [username],
     (err, bets) => {
       if (err) {
         console.error(err);

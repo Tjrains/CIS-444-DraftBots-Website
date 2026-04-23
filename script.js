@@ -43,8 +43,9 @@ function openTab(tabId, btnElement) {
 }
 
 async function getProfileData() {
+  const username = sessionStorage.getItem('username');
   const response = isLocal
-    ? await fetch("http://localhost:3000/api/profile")
+    ? await fetch(`http://localhost:3000/api/profile?username=${username}`)
     : await fetch("users.json");
 
   if (!response.ok) throw new Error("Failed to load profile");
@@ -52,8 +53,9 @@ async function getProfileData() {
 }
 
 async function getBetsData() {
+  const username = sessionStorage.getItem('username');
   if (isLocal) {
-    const response = await fetch("http://localhost:3000/api/bets");
+    const response = await fetch(`http://localhost:3000/api/bets?username=${username}`);
     if (!response.ok) throw new Error("Failed to load bets");
     return await response.json();
   } else {
