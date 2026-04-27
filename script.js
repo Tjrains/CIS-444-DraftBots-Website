@@ -20,9 +20,9 @@ const teams = [
   { name: "Bot Hotel", offense: 77, defense: 82 }
 ];
 
-const isLocal =
-  window.location.hostname === "localhost" &&
-  window.location.port === "8000";
+const API = window.Location.hostname === "localhost"
+  ? "http:localhost:3000"
+  : "https://draftbots.onrender.com"
 
 function openTab(tabId, btnElement) {
   document.querySelectorAll(".tab-content").forEach(section => {
