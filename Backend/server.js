@@ -187,6 +187,111 @@ app.post('/api/login', (req, res) => {
   );
 });
 
+// PLACE BET
+app.post('/api/place-bet', (req, res) => {
+  const { username, gameId, pick, amount } = req.body;
+
+  // Basic validation
+  if (!username || !gameId || !pick || amount === undefined) {
+    return res.status(400).json({ error: 'All fields are required.' });
+  }
+
+  const wager = Number(amount);
+  if (!Number.isFinite(wager) || wager <= 0) {
+    return res.status(400).json({ error: 'Wager must be greater than 0.' });
+  }
+
+  // Odds hardcoded for now, payout includes the stake
+  const odds   = -110;
+  const payout = +(wager * (1 + 100 / Math.abs(odds))).toFixed(2);
+  const today  = new Date().toISOString().split('T')[0];
+
+  db.get(
+    `SELECT id, balance
+     FROM users
+     WHERE username = ?`,
+    [username],
+    (err, user) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Failed to load user.' });
+      }
+
+      if (!user) {
+        return res.status(404).json({ error: 'User not found.' });
+      }
+
+      if (user.balance < wager) {
+        return res.status(400).json({ error: 'Insufficient balance.' });
+      }
+
+      db.get(
+        `SELECT id, name, sport, status, bets
+         FROM games
+         WHERE id = ?`,
+        [gameId],
+        (err, game) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Failed to load game.' });
+          }
+
+          if (!game) {
+            return res.status(404).json({ error: 'Game not found.' });
+          }
+
+          if (game.status !== 'upcoming') {
+            return res.status(400).json({ error: 'Bets are only allowed on upcoming games.' });
+          }
+
+          const validPicks = JSON.parse(game.bets || '[]');
+          if (!validPicks.includes(pick)) {
+            return res.status(400).json({ error: 'Invalid pick for this game.' });
+          }
+
+          // Decrement balance, insert bet, log transaction — all or nothing
+          db.serialize(() => {
+            db.run('BEGIN TRANSACTION');
+
+            db.run(
+              `UPDATE users SET balance = balance - ? WHERE id = ?`,
+              [wager, user.id]
+            );
+
+            db.run(
+              `INSERT INTO bets (user_id, game, sport, pick, amount, odds, payout, status, date)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
+              [user.id, game.name, game.sport, pick, wager, odds, payout, today]
+            );
+
+            db.run(
+              `INSERT INTO transactions (user_id, type, amount, date)
+               VALUES (?, ?, ?, ?)`,
+              [user.id, `Bet - ${pick}`, -wager, today]
+            );
+
+            db.run('COMMIT', (err) => {
+              if (err) {
+                console.error(err);
+                return res.status(500).json({ error: 'Failed to place bet.' });
+              }
+
+              res.status(201).json({
+                pick,
+                amount:     wager,
+                odds,
+                payout,
+                status:     'pending',
+                newBalance: +(user.balance - wager).toFixed(2)
+              });
+            });
+          });
+        }
+      );
+    }
+  );
+});
+
 app.listen(PORT, () => {
   console.log(`DraftBots backend running on http://localhost:${PORT}`);
 });

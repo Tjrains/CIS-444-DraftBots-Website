@@ -146,6 +146,7 @@ function showGame(game) {
       const div = document.createElement("div");
       div.className = "bet-option";
       div.innerHTML = `<span>${bet}</span><span class="bet-arrow">+</span>`;
+      div.onclick = () => openBetModal(game, bet);
       content.appendChild(div);
     });
   } else {
@@ -272,6 +273,121 @@ async function loadProfile() {
     }
   } catch (err) {
     console.error("Failed to load profile:", err);
+  }
+}
+
+//Bets
+const BET_ODDS = -110;
+let activeBet = null;
+
+function calcPayout(amount, odds) {
+  if (!amount || amount <= 0) return 0;
+  return odds < 0
+    ? amount * (1 + 100 / Math.abs(odds))
+    : amount * (1 + odds / 100);
+}
+
+function openBetModal(game, pick) {
+  const modal      = document.getElementById("betModal");
+  const pickEl     = document.getElementById("modalPick");
+  const gameEl     = document.getElementById("modalGame");
+  const oddsEl     = document.getElementById("modalOdds");
+  const amountEl   = document.getElementById("betAmount");
+  const payoutEl   = document.getElementById("modalPayout");
+  const errorEl    = document.getElementById("modalError");
+  const submitBtn  = document.getElementById("modalSubmit");
+
+  activeBet = { gameId: game.id, pick };
+
+  if (pickEl)    pickEl.textContent   = pick;
+  if (gameEl)    gameEl.textContent   = `${game.name} · ${game.sport ?? ""}`;
+  if (oddsEl)    oddsEl.textContent   = BET_ODDS;
+  if (amountEl)  amountEl.value       = "";
+  if (payoutEl)  payoutEl.textContent = "$0.00";
+
+  if (errorEl) {
+    errorEl.textContent = "";
+    errorEl.classList.add("hidden");
+  }
+
+  if (submitBtn) submitBtn.disabled = false;
+  if (modal)     modal.classList.remove("hidden");
+}
+
+function closeBetModal() {
+  const modal = document.getElementById("betModal");
+  if (modal) modal.classList.add("hidden");
+  activeBet = null;
+}
+
+function updatePayoutPreview() {
+  const amountEl = document.getElementById("betAmount");
+  const payoutEl = document.getElementById("modalPayout");
+  if (!amountEl || !payoutEl) return;
+
+  const amount = Number(amountEl.value);
+  const payout = calcPayout(amount, BET_ODDS);
+  payoutEl.textContent = `$${payout.toFixed(2)}`;
+}
+
+async function submitBet() {
+  if (!activeBet) return;
+
+  const amountEl  = document.getElementById("betAmount");
+  const errorEl   = document.getElementById("modalError");
+  const submitBtn = document.getElementById("modalSubmit");
+  const amount    = Number(amountEl?.value);
+
+  function showError(message) {
+    if (!errorEl) return;
+    errorEl.textContent = message;
+    errorEl.classList.remove("hidden");
+  }
+
+  if (errorEl) {
+    errorEl.textContent = "";
+    errorEl.classList.add("hidden");
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showError("Enter a wager greater than 0.");
+    return;
+  }
+
+  if (!isLocal) {
+    showError("Bet placement requires the backend to be running.");
+    return;
+  }
+
+  if (submitBtn) submitBtn.disabled = true;
+
+  try {
+    const response = await fetch("http://localhost:3000/api/place-bet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: sessionStorage.getItem("username"),
+        gameId:   activeBet.gameId,
+        pick:     activeBet.pick,
+        amount
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      showError(data.error ?? "Failed to place bet.");
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
+
+    closeBetModal();
+    loadProfile();
+    loadBets();
+  } catch (err) {
+    console.error("Failed to place bet:", err);
+    showError("Network error. Please try again.");
+    if (submitBtn) submitBtn.disabled = false;
   }
 }
 

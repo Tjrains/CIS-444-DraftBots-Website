@@ -92,5 +92,26 @@
 
   </main>
 
+  <div id="betModal" class="modal-overlay hidden">
+    <div class="modal">
+      <button class="modal-close" onclick="closeBetModal()">×</button>
+      <h3 class="modal-title">Place Bet</h3>
+      <p class="modal-pick" id="modalPick"></p>
+      <p class="modal-game" id="modalGame"></p>
+      <div class="modal-row">
+        <span>Odds</span>
+        <span id="modalOdds">-110</span>
+      </div>
+      <label class="modal-label" for="betAmount">Wager Amount ($)</label>
+      <input type="number" id="betAmount" min="1" step="0.01" placeholder="0.00" oninput="updatePayoutPreview()">
+      <div class="modal-row">
+        <span>Potential Payout</span>
+        <span id="modalPayout" class="positive">$0.00</span>
+      </div>
+      <p class="modal-error hidden" id="modalError"></p>
+      <button class="modal-submit" id="modalSubmit" onclick="submitBet()">Place Bet</button>
+    </div>
+  </div>
+
 </body>
 </html>
