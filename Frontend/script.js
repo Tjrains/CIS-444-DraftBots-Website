@@ -20,9 +20,9 @@ const teams = [
   { name: "Bot Hotel", offense: 77, defense: 82 }
 ];
 
-const isLocal =
-  window.location.hostname === "localhost" &&
-  window.location.port === "8000";
+const API = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+  ? "http:localhost:3000"
+  : "https://draftbots.onrender.com"
 
 function openTab(tabId, btnElement) {
   document.querySelectorAll(".tab-content").forEach(section => {
@@ -44,51 +44,25 @@ function openTab(tabId, btnElement) {
 
 async function getProfileData() {
   const username = sessionStorage.getItem('username');
-  const response = isLocal
-    ? await fetch(`http://localhost:3000/api/profile?username=${username}`)
-    : await fetch("users.json");
-
+  const response = await fetch(`${API}/api/profile?username=${username}`);
+  
   if (!response.ok) throw new Error("Failed to load profile");
   return await response.json();
 }
 
 async function getBetsData() {
   const username = sessionStorage.getItem('username');
-  if (isLocal) {
-    const response = await fetch(`http://localhost:3000/api/bets?username=${username}`);
-    if (!response.ok) throw new Error("Failed to load bets");
-    return await response.json();
-  } else {
-    const response = await fetch("bets.json");
-    if (!response.ok) throw new Error("Failed to load bets.json");
-    const data = await response.json();
-    return data.bets || [];
-  }
+  const response = await fetch(`${API}/api/bets?username=${username}`);
+
+  if (!response.ok) throw new Error("Failed to load bets");
+  return await response.json();
 }
 
 async function getGamesData() {
-  if (isLocal) {
-    const response = await fetch("http://localhost:3000/api/games");
-    if (!response.ok) throw new Error("Failed to load games");
-    return await response.json();
-  } else {
-    return [
-      {
-        id: 1,
-        name: "Bot Alpha vs Bot Bravo",
-        sport: "Football",
-        status: "upcoming",
-        bets: ["Bot Alpha -3.5", "Bot Bravo +3.5", "Over 42.5", "Under 42.5"]
-      },
-      {
-        id: 2,
-        name: "Bot Charlie vs Bot Delta",
-        sport: "Soccer",
-        status: "live",
-        bets: []
-      }
-    ];
-  }
+  const response = await fetch(`${API}/api/games`);
+
+  if (!response.ok) throw new Error("Failed to load games");
+  return await response.json();
 }
 
 async function loadGames() {

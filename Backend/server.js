@@ -5,7 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
@@ -189,4 +189,16 @@ app.post('/api/login', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`DraftBots backend running on http://localhost:${PORT}`);
+});
+
+app.get('/api/debug/all', (req, res) => {
+  db.all('SELECT * FROM users', [], (err, users) => {
+    if (err) return res.status(500).json(err);
+
+    db.all('SELECT * FROM bets', [], (err2, bets) => {
+      if (err2) return res.status(500).json(err2);
+
+      res.json({ users, bets });
+    });
+  });
 });
