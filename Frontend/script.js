@@ -1,5 +1,4 @@
 // AUTH GUARD — redirect to login if not logged in
-// This runs immediately when the script loads
 (function checkAuth() {
   if (!sessionStorage.getItem('loggedIn')) {
     window.location.href = 'login.html';
@@ -27,6 +26,12 @@ const API =
     ? "http://localhost:3000"
     : "https://draftbots.onrender.com";
 
+// State for live updates
+let pollTimer = null;
+let countdownTimer = null;
+let currentDetailGameId = null;
+let pollInFlight = false; // prevent overlapping polls
+
 function openTab(tabId, btnElement) {
   document.querySelectorAll(".tab-content").forEach(section => {
     section.classList.remove("active");
@@ -39,6 +44,7 @@ function openTab(tabId, btnElement) {
   if (gameDetails && tabId !== "gameDetails") {
     gameDetails.classList.add("hidden");
     gameDetails.classList.remove("active");
+    currentDetailGameId = null;
   }
 
   document.querySelectorAll(".tab").forEach(btn => btn.classList.remove("active"));
@@ -48,7 +54,7 @@ function openTab(tabId, btnElement) {
 async function getProfileData() {
   const username = sessionStorage.getItem('username');
   const response = await fetch(`${API}/api/profile?username=${username}`);
-  
+
   if (!response.ok) throw new Error("Failed to load profile");
   return await response.json();
 }
@@ -68,34 +74,148 @@ async function getGamesData() {
   return await response.json();
 }
 
+// --- Helpers ---
+function formatCountdown(ms) {
+  if (ms <= 0) return "00:00";
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function splitTeams(gameName) {
+  const parts = (gameName || "").split(' vs ');
+  return { home: parts[0] || 'Home', away: parts[1] || 'Away' };
+}
+
+// What appears on the right of a schedule card.
+function renderStatusPill(game) {
+  // Live game -> pulsing red countdown showing time left in the game
+  if (game.status === 'live' && game.endTime) {
+    const endMs = new Date(game.endTime).getTime();
+    return `
+      <span class="live-pill" data-end="${endMs}" data-game-id="${game.id}">
+        <span class="live-pill-dot"></span>
+        <span class="countdown-time">${formatCountdown(endMs - Date.now())}</span>
+      </span>
+    `;
+  }
+
+  // Upcoming with a known start time -> blue countdown to lock
+  if (game.status === 'upcoming' && game.startTime) {
+    const startMs = new Date(game.startTime).getTime();
+    const remaining = startMs - Date.now();
+    if (remaining > 0) {
+      return `
+        <span class="countdown-pill" data-start="${startMs}" data-game-id="${game.id}">
+          <span class="countdown-time">${formatCountdown(remaining)}</span>
+        </span>
+      `;
+    }
+  }
+
+  // Finished with a score -> compact final-score pill
+  if (game.status === 'finished' && game.homeScore != null && game.awayScore != null) {
+    return `<span class="final-pill">${game.homeScore} - ${game.awayScore}</span>`;
+  }
+
+  return `<span class="status-pill ${game.status}">${game.status}</span>`;
+}
+
 async function loadGames() {
   const gameList = document.getElementById("gameList");
   if (!gameList) return;
 
-  gameList.innerHTML = "";
-
   try {
     games = await getGamesData();
-
-    games.forEach(game => {
-      const card = document.createElement("div");
-      card.className = "game-card";
-      card.onclick = () => showGame(game);
-
-      card.innerHTML = `
-        <div class="game-card-left">
-          <span class="game-name">${game.name}</span>
-          <span class="game-sport">${game.sport || ""}</span>
-        </div>
-        <span class="status-pill ${game.status}">${game.status}</span>
-      `;
-
-      gameList.appendChild(card);
-    });
+    renderSchedule();
   } catch (err) {
     console.error("Failed to load games:", err);
     gameList.innerHTML = `<p class="empty-msg">Could not load games.</p>`;
   }
+}
+
+function renderSchedule() {
+  const gameList = document.getElementById("gameList");
+  if (!gameList) return;
+
+  gameList.innerHTML = "";
+  games.forEach(game => {
+    const card = document.createElement("div");
+    card.className = "game-card";
+    card.onclick = () => showGame(game);
+
+    card.innerHTML = `
+      <div class="game-card-left">
+        <span class="game-name">${game.name}</span>
+        <span class="game-sport">${game.sport || ""}</span>
+      </div>
+      ${renderStatusPill(game)}
+    `;
+    gameList.appendChild(card);
+  });
+}
+
+// What appears at the top of the game-detail view.
+function renderGameHeader(game) {
+  if (game.status === "finished") {
+    if (game.homeScore != null && game.awayScore != null) {
+      const { home, away } = splitTeams(game.name);
+      return `
+        <div class="final-score">
+          <div class="final-score-label">Final Score</div>
+          <div class="final-score-row">
+            <span class="team-name">${home}</span>
+            <span class="score">${game.homeScore}</span>
+            <span class="dash">—</span>
+            <span class="score">${game.awayScore}</span>
+            <span class="team-name">${away}</span>
+          </div>
+        </div>
+      `;
+    }
+    return `<div class="final-score"><div class="final-score-label">Game Finished</div></div>`;
+  }
+
+  if (game.status === "live") {
+    if (game.endTime) {
+      const endMs = new Date(game.endTime).getTime();
+      const remaining = endMs - Date.now();
+      return `
+        <div class="live-indicator" data-end="${endMs}" data-game-id="${game.id}">
+          <div class="live-indicator-left">
+            <span class="live-dot"></span>
+            <span>LIVE NOW · BETTING CLOSED</span>
+          </div>
+          <div class="live-indicator-right">
+            <span class="time-label">Time remaining</span>
+            <span class="countdown-time">${formatCountdown(remaining)}</span>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="live-indicator">
+        <div class="live-indicator-left">
+          <span class="live-dot"></span>
+          <span>LIVE NOW · BETTING CLOSED</span>
+        </div>
+      </div>
+    `;
+  }
+
+  if (game.status === "upcoming" && game.startTime) {
+    const startMs = new Date(game.startTime).getTime();
+    const remaining = startMs - Date.now();
+    if (remaining > 0) {
+      return `
+        <div class="countdown" data-start="${startMs}" data-game-id="${game.id}">
+          Bets close in <span class="countdown-time">${formatCountdown(remaining)}</span>
+        </div>
+      `;
+    }
+  }
+  return '';
 }
 
 function showGame(game) {
@@ -109,34 +229,41 @@ function showGame(game) {
   gameDetails.classList.remove("hidden");
   gameDetails.classList.add("active");
 
-  const title = document.getElementById("gameTitle");
+  const title   = document.getElementById("gameTitle");
   const content = document.getElementById("gameContent");
 
   if (title) title.textContent = game.name;
   if (!content) return;
 
   content.innerHTML = "";
+  const headerHtml = renderGameHeader(game);
 
   if (game.status === "upcoming") {
-    content.innerHTML = `<h3>Available Bets</h3>`;
-    game.bets.forEach(bet => {
+    content.innerHTML = headerHtml + `<h3 style="margin-top:8px">Available Bets</h3>`;
+    (game.bets || []).forEach(bet => {
+      const label = (typeof bet === 'object' && bet) ? bet.label : bet;
       const div = document.createElement("div");
       div.className = "bet-option";
-      div.innerHTML = `<span>${bet}</span><span class="bet-arrow">+</span>`;
+      div.innerHTML = `<span>${label}</span><span class="bet-arrow">+</span>`;
       div.onclick = () => openBetModal(game, bet);
       content.appendChild(div);
     });
-  } else {
-    content.innerHTML = `
-      <h3>🔴 Game is Live!</h3>
-      <p style="color: var(--muted);">Live gameplay display coming soon.</p>
+  } else if (game.status === "live") {
+    content.innerHTML = headerHtml + `
+      <p style="color: var(--muted); margin-top:8px;">
+        Game is in progress. Pending bets will be settled when it ends.
+      </p>
     `;
+  } else {
+    content.innerHTML = headerHtml;
   }
+
+  currentDetailGameId = game.id;
 }
 
 function goBack() {
   const gameDetails = document.getElementById("gameDetails");
-  const schedule = document.getElementById("schedule");
+  const schedule    = document.getElementById("schedule");
 
   if (gameDetails) {
     gameDetails.classList.add("hidden");
@@ -148,6 +275,8 @@ function goBack() {
   document.querySelectorAll(".tab").forEach(btn => btn.classList.remove("active"));
   const firstTab = document.querySelectorAll(".tab")[0];
   if (firstTab) firstTab.classList.add("active");
+
+  currentDetailGameId = null;
 }
 
 function loadTeams() {
@@ -162,7 +291,7 @@ function loadTeams() {
     card.innerHTML = `
       <div class="team-logo-wrap">
         <img class="team-logo" src="${team.logo}" alt="${team.name} logo" />
-      </div>  
+      </div>
       <h3>${team.name}</h3>
       <p class="team-stat">Offense: <span>${team.offense}</span></p>
       <p class="team-stat">Defense: <span>${team.defense}</span></p>
@@ -188,7 +317,7 @@ async function loadBets() {
       const div = document.createElement("div");
       div.className = "bet-card";
 
-      const isWon = bet.status === "won";
+      const isWon  = bet.status === "won";
       const isLost = bet.status === "lost";
       const amountText = isWon
         ? `+$${Number(bet.payout).toFixed(2)}`
@@ -218,20 +347,20 @@ async function loadProfile() {
   try {
     const user = await getProfileData();
 
-    const username = document.getElementById("username");
-    const email = document.getElementById("email");
-    const createdAt = document.getElementById("createdAt");
-    const status = document.getElementById("status");
-    const balance = document.getElementById("balance");
+    const username      = document.getElementById("username");
+    const email         = document.getElementById("email");
+    const createdAt     = document.getElementById("createdAt");
+    const status        = document.getElementById("status");
+    const balance       = document.getElementById("balance");
     const avatarInitial = document.getElementById("avatarInitial");
     const headerBalance = document.getElementById("headerBalance");
-    const list = document.getElementById("transactionList");
+    const list          = document.getElementById("transactionList");
 
-    if (username) username.textContent = user.username ?? "Unknown";
-    if (email) email.textContent = user.email ?? "";
-    if (createdAt) createdAt.textContent = user.createdAt ?? "—";
-    if (status) status.textContent = user.status ?? "";
-    if (balance) balance.textContent = `$${Number(user.balance || 0).toFixed(2)}`;
+    if (username)      username.textContent      = user.username ?? "Unknown";
+    if (email)         email.textContent         = user.email ?? "";
+    if (createdAt)     createdAt.textContent     = user.createdAt ?? "—";
+    if (status)        status.textContent        = user.status ?? "";
+    if (balance)       balance.textContent       = `$${Number(user.balance || 0).toFixed(2)}`;
     if (avatarInitial) avatarInitial.textContent = (user.username || "?").charAt(0).toUpperCase();
     if (headerBalance) headerBalance.textContent = `Balance: $${Number(user.balance || 0).toFixed(2)}`;
 
@@ -256,9 +385,98 @@ async function loadProfile() {
   }
 }
 
+// ============================================================================
+// LIVE UPDATES
+// ----------------------------------------------------------------------------
+// We poll /api/games every 10s so status flips and final scores show up
+// without a refresh. A separate 1s timer ticks the visible countdowns.
+//
+// When ANY countdown crosses 00:00 we fire an immediate "eager" poll instead
+// of waiting for the next 10s tick - this is what makes the upcoming -> live
+// flip and the live -> finished flip feel instant.
+// ============================================================================
+function startLiveUpdates() {
+  if (!pollTimer) {
+    pollTimer = setInterval(() => {
+      if (document.hidden) return;
+      pollGames();
+    }, 10000);
+  }
+  if (!countdownTimer) {
+    countdownTimer = setInterval(updateCountdownDisplays, 1000);
+  }
+}
 
+async function pollGames() {
+  if (pollInFlight) return;
+  pollInFlight = true;
+  try {
+    const fresh = await getGamesData();
+    const prev = games;
+    games = fresh;
+
+    renderSchedule();
+
+    // If we're sitting on a game's detail page and that game changed, re-render.
+    if (currentDetailGameId != null) {
+      const newer = fresh.find(g => g.id === currentDetailGameId);
+      const older = prev.find(g => g.id === currentDetailGameId);
+      if (newer && (
+        !older ||
+        newer.status    !== older.status ||
+        newer.homeScore !== older.homeScore ||
+        newer.awayScore !== older.awayScore
+      )) {
+        showGame(newer);
+        if (newer.status === 'finished') {
+          loadBets();
+          loadProfile();
+        }
+      } else if (!newer) {
+        // The game we were viewing got removed (replacement cleanup).
+        goBack();
+      }
+    }
+  } catch (err) {
+    // Quiet — most likely a transient network blip.
+  } finally {
+    pollInFlight = false;
+  }
+}
+
+function updateCountdownDisplays() {
+  const elements = document.querySelectorAll('[data-start], [data-end]');
+  let shouldEagerPoll = false;
+
+  elements.forEach(el => {
+    const targetMs = el.dataset.start
+      ? Number(el.dataset.start)
+      : Number(el.dataset.end);
+    const remaining = targetMs - Date.now();
+    const timeEl = el.querySelector('.countdown-time') || el;
+
+    if (remaining <= 0) {
+      timeEl.textContent = "00:00";
+      // First time crossing zero -> ask the server for fresh state.
+      // The server's setTimeout fires at the same wall-clock instant, so
+      // by the time the response arrives (~100ms) the flip is already done.
+      if (!el.dataset.expired) {
+        el.dataset.expired = '1';
+        shouldEagerPoll = true;
+      }
+    } else {
+      timeEl.textContent = formatCountdown(remaining);
+    }
+  });
+
+  if (shouldEagerPoll) {
+    pollGames();
+  }
+}
+
+// ============================================================================
 // BET PLACEMENT
-const BET_ODDS = -110;
+// ============================================================================
 let activeBet = null;
 
 function calcPayout(amount, odds) {
@@ -268,22 +486,26 @@ function calcPayout(amount, odds) {
     : amount * (1 + odds / 100);
 }
 
-function openBetModal(game, pick) {
-  const modal = document.getElementById("betModal");
-  const pickEl = document.getElementById("modalPick");
-  const gameEl = document.getElementById("modalGame");
-  const oddsEl = document.getElementById("modalOdds");
-  const amountEl = document.getElementById("betAmount");
-  const payoutEl = document.getElementById("modalPayout");
-  const errorEl = document.getElementById("modalError");
+function openBetModal(game, bet) {
+  // bet may be a structured object {label, odds, ...} or a legacy string
+  const label = (typeof bet === 'object' && bet) ? bet.label : bet;
+  const odds  = (typeof bet === 'object' && bet && Number.isFinite(bet.odds)) ? bet.odds : -110;
+
+  const modal     = document.getElementById("betModal");
+  const pickEl    = document.getElementById("modalPick");
+  const gameEl    = document.getElementById("modalGame");
+  const oddsEl    = document.getElementById("modalOdds");
+  const amountEl  = document.getElementById("betAmount");
+  const payoutEl  = document.getElementById("modalPayout");
+  const errorEl   = document.getElementById("modalError");
   const submitBtn = document.getElementById("modalSubmit");
 
-  activeBet = { gameId: game.id, pick };
+  activeBet = { gameId: game.id, pick: label, odds };
 
-  if (pickEl) pickEl.textContent = pick;
-  if (gameEl) gameEl.textContent = `${game.name} · ${game.sport ?? ""}`;
-  if (oddsEl) oddsEl.textContent = BET_ODDS;
-  if (amountEl) amountEl.value = "";
+  if (pickEl)   pickEl.textContent   = label;
+  if (gameEl)   gameEl.textContent   = `${game.name} · ${game.sport ?? ""}`;
+  if (oddsEl)   oddsEl.textContent   = (odds > 0 ? `+${odds}` : odds);
+  if (amountEl) amountEl.value       = "";
   if (payoutEl) payoutEl.textContent = "$0.00";
 
   if (errorEl) {
@@ -292,7 +514,7 @@ function openBetModal(game, pick) {
   }
 
   if (submitBtn) submitBtn.disabled = false;
-  if (modal) modal.classList.remove("hidden");
+  if (modal)     modal.classList.remove("hidden");
 }
 
 function closeBetModal() {
@@ -307,17 +529,18 @@ function updatePayoutPreview() {
   if (!amountEl || !payoutEl) return;
 
   const amount = Number(amountEl.value);
-  const payout = calcPayout(amount, BET_ODDS);
+  const odds   = activeBet?.odds ?? -110;
+  const payout = calcPayout(amount, odds);
   payoutEl.textContent = `$${payout.toFixed(2)}`;
 }
 
 async function submitBet() {
   if (!activeBet) return;
 
-  const amountEl = document.getElementById("betAmount");
-  const errorEl = document.getElementById("modalError");
+  const amountEl  = document.getElementById("betAmount");
+  const errorEl   = document.getElementById("modalError");
   const submitBtn = document.getElementById("modalSubmit");
-  const amount = Number(amountEl?.value);
+  const amount    = Number(amountEl?.value);
 
   function showError(message) {
     if (!errorEl) return;
@@ -367,7 +590,6 @@ async function submitBet() {
   }
 }
 
-//ADDING LOGOUT FUNCITON
 function logout() {
   sessionStorage.removeItem('loggedIn');
   sessionStorage.removeItem('username');
@@ -379,4 +601,5 @@ window.onload = () => {
   loadTeams();
   loadProfile();
   loadBets();
+  startLiveUpdates();
 };

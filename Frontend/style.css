@@ -87,6 +87,10 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 .status-pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
 .status-pill.live { color: var(--red); border: 1px solid var(--red); }
 .status-pill.upcoming { color: var(--accent); border: 1px solid var(--accent); }
+.status-pill.finished { color: var(--muted); border: 1px solid var(--border); }
+.status-pill.pending { color: var(--accent); border: 1px solid var(--accent); }
+.status-pill.won { color: var(--green); border: 1px solid var(--green); }
+.status-pill.lost { color: var(--red); border: 1px solid var(--red); }
 
 /* === GAME DETAILS === */
 .back-btn {
@@ -125,7 +129,6 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 .team-logo-wrap{ display: flex; justify-content: center; align-items: center; margin-bottom: 12px; }
 .team-logo { width: 100px; height: 100px; object-fit: contain; filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4)); transition: transform 0.2s ease; }
 .team-card:hover .team-logo { transform: scale(1.06); }
-
 
 
 /* === PROFILE === */
@@ -196,9 +199,7 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
   margin-bottom: 12px;
 }
 
-.bet-card:hover {
-  border-color: var(--accent);
-}
+.bet-card:hover { border-color: var(--accent); }
 
 .bet-card > div:first-child {
   display: flex;
@@ -214,11 +215,7 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
   flex-shrink: 0;
 }
 
-#betsList {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+#betsList { display: flex; flex-direction: column; gap: 12px; }
 
 /* === MODAL === */
 .modal-overlay {
@@ -314,3 +311,172 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 }
 .modal-submit:hover { background-color: #1668a8; }
 .modal-submit:disabled { background-color: var(--border); cursor: not-allowed; }
+
+
+/* ====================================================================== */
+/* === LIFECYCLE: COUNTDOWNS, LIVE PILL, FINAL SCORE                    === */
+/* ====================================================================== */
+
+/* Blue countdown pill on the schedule list (upcoming -> bets close in MM:SS). */
+.countdown-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  background-color: rgba(30, 127, 203, 0.10);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.5px;
+}
+
+/* Pulsing red live pill on the schedule list (live -> time remaining MM:SS). */
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--red);
+  border: 1px solid var(--red);
+  background-color: rgba(231, 76, 60, 0.10);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Barlow Condensed', sans-serif;
+  letter-spacing: 0.5px;
+}
+.live-pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--red);
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+
+/* Final-score pill for finished games on the schedule list. */
+.final-pill {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+/* Big "bets close in" banner at the top of the upcoming-game detail view. */
+.countdown {
+  background-color: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 14px 18px;
+  color: var(--accent);
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 14px;
+  letter-spacing: 0.5px;
+}
+.countdown .countdown-time {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  margin-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* LIVE banner at the top of the live-game detail view, with time remaining. */
+.live-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background-color: rgba(231, 76, 60, 0.10);
+  border: 1px solid var(--red);
+  border-radius: 8px;
+  padding: 14px 18px;
+  color: var(--red);
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.live-indicator-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+.live-indicator-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.live-indicator-right .time-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+.live-indicator-right .countdown-time {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+.live-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background-color: var(--red);
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(1.35); }
+}
+
+/* Final score display on the game-detail view. */
+.final-score {
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px 16px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.final-score-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.final-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+.final-score-row .team-name { color: var(--text); }
+.final-score-row .score {
+  font-size: 34px;
+  font-weight: 700;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+}
+.final-score-row .dash { color: var(--muted); }
