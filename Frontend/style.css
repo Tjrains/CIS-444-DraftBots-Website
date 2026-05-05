@@ -91,6 +91,22 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 .status-pill.pending { color: var(--accent); border: 1px solid var(--accent); }
 .status-pill.won { color: var(--green); border: 1px solid var(--green); }
 .status-pill.lost { color: var(--red); border: 1px solid var(--red); }
+.status-pill.cancelled { color: var(--muted); border: 1px solid var(--muted); }
+
+.cancel-bet-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: 'Barlow', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.cancel-bet-btn:hover { border-color: var(--red); color: var(--red); }
 
 /* === GAME DETAILS === */
 .back-btn {
@@ -377,9 +393,6 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 .modal-submit:disabled { background-color: var(--border); cursor: not-allowed; }
 
 
-/* ====================================================================== */
-/* === LIFECYCLE: COUNTDOWNS, LIVE PILL, FINAL SCORE                    === */
-/* ====================================================================== */
 
 /* Blue countdown pill on the schedule list (upcoming -> bets close in MM:SS). */
 .countdown-pill {
