@@ -84,6 +84,7 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 .game-name { font-weight: 600; font-size: 16px; }
 .game-sport { font-size: 12px; color: var(--muted); }
 
+/* === STATUS PILLS === */
 .status-pill { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 20px; }
 .status-pill.live { color: var(--red); border: 1px solid var(--red); }
 .status-pill.upcoming { color: var(--accent); border: 1px solid var(--accent); }
@@ -93,6 +94,7 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 .status-pill.lost { color: var(--red); border: 1px solid var(--red); }
 .status-pill.cancelled { color: var(--muted); border: 1px solid var(--muted); }
 
+/* === CANCEL BET BUTTON === */
 .cancel-bet-btn {
   background: none;
   border: 1px solid var(--border);
@@ -321,7 +323,7 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 
 #betsList { display: flex; flex-direction: column; gap: 12px; }
 
-/* === MODAL === */
+/* === BETS PLACEMENT MODAL === */
 .modal-overlay {
   position: fixed;
   inset: 0;
@@ -540,6 +542,8 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
   background-color: var(--red);
   animation: livePulse 1.4s ease-in-out infinite;
 }
+
+/* Shared animation used by .live-dot and .live-pill-dot */
 @keyframes livePulse {
   0%, 100% { opacity: 1;   transform: scale(1); }
   50%      { opacity: 0.4; transform: scale(1.35); }

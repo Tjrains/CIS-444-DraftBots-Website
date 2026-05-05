@@ -7,7 +7,7 @@
 
 let games = [];
 
-// --- Sample team data ---
+// --- Team Data ---
 const teams = [
   { name: "Austin Armadillos", city: "Austin", logo: "images/Austin.png", offense: 88, defense: 74 },
   { name: "Portland Stormchasers", city: "Portland", logo: "images/Portland.png", offense: 65, defense: 91 },
@@ -19,6 +19,7 @@ const teams = [
   { name: "San Diego Sun Rays", city: "San Diego", logo: "images/San_Diego.png", offense: 77, defense: 82 }
 ];
 
+// -- API Base URL --
 const API =
   window.location.hostname === "localhost" ||
   window.location.hostname === "127.0.0.1" ||
@@ -26,12 +27,13 @@ const API =
     ? "http://localhost:3000"
     : "https://draftbots.onrender.com";
 
-// State for live updates
+// -- State for live updates --
 let pollTimer = null;
 let countdownTimer = null;
 let currentDetailGameId = null;
 let pollInFlight = false; // prevent overlapping polls
 
+// -- Tab Navigation --
 function openTab(tabId, btnElement) {
   document.querySelectorAll(".tab-content").forEach(section => {
     section.classList.remove("active");
@@ -50,6 +52,8 @@ function openTab(tabId, btnElement) {
   document.querySelectorAll(".tab").forEach(btn => btn.classList.remove("active"));
   if (btnElement) btnElement.classList.add("active");
 }
+
+// -- API Fetch Helpers --
 
 async function getProfileData() {
   const username = sessionStorage.getItem('username');
@@ -74,7 +78,7 @@ async function getGamesData() {
   return await response.json();
 }
 
-// --- Helpers ---
+// -- Countdown Formatter --
 function formatCountdown(ms) {
   if (ms <= 0) return "00:00";
   const totalSec = Math.floor(ms / 1000);
@@ -83,12 +87,13 @@ function formatCountdown(ms) {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+// -- Team Name Splitter --
 function splitTeams(gameName) {
   const parts = (gameName || "").split(' vs ');
   return { home: parts[0] || 'Home', away: parts[1] || 'Away' };
 }
 
-// What appears on the right of a schedule card.
+// -- Status Pill Renderer --
 function renderStatusPill(game) {
   // Live game -> pulsing red countdown showing time left in the game
   if (game.status === 'live' && game.endTime) {
@@ -122,6 +127,8 @@ function renderStatusPill(game) {
   return `<span class="status-pill ${game.status}">${game.status}</span>`;
 }
 
+// -- Game list loader --
+
 async function loadGames() {
   const gameList = document.getElementById("gameList");
   if (!gameList) return;
@@ -135,6 +142,8 @@ async function loadGames() {
   }
 }
 
+
+// -- Schedule Renderer --
 function renderSchedule() {
   const gameList = document.getElementById("gameList");
   if (!gameList) return;
@@ -156,7 +165,7 @@ function renderSchedule() {
   });
 }
 
-// What appears at the top of the game-detail view.
+// -- Game Detail Header Renderer --
 function renderGameHeader(game) {
   if (game.status === "finished") {
     if (game.homeScore != null && game.awayScore != null) {
@@ -218,6 +227,7 @@ function renderGameHeader(game) {
   return '';
 }
 
+// -- Game Detail View --
 function showGame(game) {
   document.querySelectorAll(".tab-content").forEach(section => {
     section.classList.remove("active");
@@ -261,6 +271,7 @@ function showGame(game) {
   currentDetailGameId = game.id;
 }
 
+// -- Backwards Navigation --
 function goBack() {
   const gameDetails = document.getElementById("gameDetails");
   const schedule    = document.getElementById("schedule");
@@ -279,6 +290,7 @@ function goBack() {
   currentDetailGameId = null;
 }
 
+// -- Teams tab renderer --
 function loadTeams() {
   const teamGrid = document.getElementById("teamGrid");
   if (!teamGrid) return;
@@ -300,6 +312,7 @@ function loadTeams() {
   });
 }
 
+// -- Bets tab renderer --
 async function loadBets() {
   const betsList = document.getElementById("betsList");
   if (!betsList) return;
@@ -353,6 +366,7 @@ async function loadBets() {
   }
 }
 
+// -- Profile tab renderer --
 async function loadProfile() {
   try {
     const user = await getProfileData();
@@ -496,6 +510,7 @@ async function pollGames() {
   }
 }
 
+// -- Countdown Display Updater --
 function updateCountdownDisplays() {
   const elements = document.querySelectorAll('[data-start], [data-end]');
   let shouldEagerPoll = false;
@@ -531,6 +546,7 @@ function updateCountdownDisplays() {
 // ============================================================================
 let activeBet = null;
 
+// -- Odds Payout Formula --
 function calcPayout(amount, odds) {
   if (!amount || amount <= 0) return 0;
   return odds < 0
@@ -642,6 +658,7 @@ async function submitBet() {
   }
 }
 
+// -- Bet Cancellation --
 async function cancelBet(betId) {
   if (!betId) return;
   if (!confirm("Cancel this bet and refund your wager?")) return;
@@ -670,12 +687,14 @@ async function cancelBet(betId) {
   }
 }
 
+// -- Logout --
 function logout() {
   sessionStorage.removeItem('loggedIn');
   sessionStorage.removeItem('username');
   window.location.href = 'login.html';
 }
 
+// -- App Initialization --
 window.onload = () => {
   loadGames();
   loadTeams();
