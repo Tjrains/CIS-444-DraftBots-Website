@@ -26,10 +26,11 @@ const API =
     ? "http://localhost:3000"
     : "https://draftbots.onrender.com";
 
-// State for the live updates
-let pollTimer = null;        // refetches /api/games periodically
-let countdownTimer = null;   // updates countdown displays once per second
-let currentDetailGameId = null; // the game we're currently looking at, if any
+// State for live updates
+let pollTimer = null;
+let countdownTimer = null;
+let currentDetailGameId = null;
+let pollInFlight = false; // prevent overlapping polls
 
 function openTab(tabId, btnElement) {
   document.querySelectorAll(".tab-content").forEach(section => {
@@ -73,7 +74,7 @@ async function getGamesData() {
   return await response.json();
 }
 
-// Helpers for countdowns and final-score display
+// --- Helpers ---
 function formatCountdown(ms) {
   if (ms <= 0) return "00:00";
   const totalSec = Math.floor(ms / 1000);
@@ -87,17 +88,37 @@ function splitTeams(gameName) {
   return { home: parts[0] || 'Home', away: parts[1] || 'Away' };
 }
 
+// What appears on the right of a schedule card.
 function renderStatusPill(game) {
-  // What appears on the right side of a schedule card.
+  // Live game -> pulsing red countdown showing time left in the game
+  if (game.status === 'live' && game.endTime) {
+    const endMs = new Date(game.endTime).getTime();
+    return `
+      <span class="live-pill" data-end="${endMs}" data-game-id="${game.id}">
+        <span class="live-pill-dot"></span>
+        <span class="countdown-time">${formatCountdown(endMs - Date.now())}</span>
+      </span>
+    `;
+  }
+
+  // Upcoming with a known start time -> blue countdown to lock
   if (game.status === 'upcoming' && game.startTime) {
-    const remaining = new Date(game.startTime).getTime() - Date.now();
+    const startMs = new Date(game.startTime).getTime();
+    const remaining = startMs - Date.now();
     if (remaining > 0) {
-      return `<span class="countdown-pill" data-start="${new Date(game.startTime).getTime()}">${formatCountdown(remaining)}</span>`;
+      return `
+        <span class="countdown-pill" data-start="${startMs}" data-game-id="${game.id}">
+          <span class="countdown-time">${formatCountdown(remaining)}</span>
+        </span>
+      `;
     }
   }
+
+  // Finished with a score -> compact final-score pill
   if (game.status === 'finished' && game.homeScore != null && game.awayScore != null) {
     return `<span class="final-pill">${game.homeScore} - ${game.awayScore}</span>`;
   }
+
   return `<span class="status-pill ${game.status}">${game.status}</span>`;
 }
 
@@ -135,6 +156,7 @@ function renderSchedule() {
   });
 }
 
+// What appears at the top of the game-detail view.
 function renderGameHeader(game) {
   if (game.status === "finished") {
     if (game.homeScore != null && game.awayScore != null) {
@@ -156,7 +178,30 @@ function renderGameHeader(game) {
   }
 
   if (game.status === "live") {
-    return `<div class="live-indicator"><span class="live-dot"></span> LIVE NOW · BETTING CLOSED</div>`;
+    if (game.endTime) {
+      const endMs = new Date(game.endTime).getTime();
+      const remaining = endMs - Date.now();
+      return `
+        <div class="live-indicator" data-end="${endMs}" data-game-id="${game.id}">
+          <div class="live-indicator-left">
+            <span class="live-dot"></span>
+            <span>LIVE NOW · BETTING CLOSED</span>
+          </div>
+          <div class="live-indicator-right">
+            <span class="time-label">Time remaining</span>
+            <span class="countdown-time">${formatCountdown(remaining)}</span>
+          </div>
+        </div>
+      `;
+    }
+    return `
+      <div class="live-indicator">
+        <div class="live-indicator-left">
+          <span class="live-dot"></span>
+          <span>LIVE NOW · BETTING CLOSED</span>
+        </div>
+      </div>
+    `;
   }
 
   if (game.status === "upcoming" && game.startTime) {
@@ -164,9 +209,10 @@ function renderGameHeader(game) {
     const remaining = startMs - Date.now();
     if (remaining > 0) {
       return `
-        <div class="countdown" data-start="${startMs}">
+        <div class="countdown" data-start="${startMs}" data-game-id="${game.id}">
           Bets close in <span class="countdown-time">${formatCountdown(remaining)}</span>
-        </div>`;
+        </div>
+      `;
     }
   }
   return '';
@@ -195,8 +241,6 @@ function showGame(game) {
   if (game.status === "upcoming") {
     content.innerHTML = headerHtml + `<h3 style="margin-top:8px">Available Bets</h3>`;
     (game.bets || []).forEach(bet => {
-      // Bets are now structured objects ({label, type, ...}); fall back to
-      // string for any legacy data that hasn't been re-seeded.
       const label = (typeof bet === 'object' && bet) ? bet.label : bet;
       const div = document.createElement("div");
       div.className = "bet-option";
@@ -208,7 +252,8 @@ function showGame(game) {
     content.innerHTML = headerHtml + `
       <p style="color: var(--muted); margin-top:8px;">
         Game is in progress. Pending bets will be settled when it ends.
-      </p>`;
+      </p>
+    `;
   } else {
     content.innerHTML = headerHtml;
   }
@@ -218,7 +263,7 @@ function showGame(game) {
 
 function goBack() {
   const gameDetails = document.getElementById("gameDetails");
-  const schedule = document.getElementById("schedule");
+  const schedule    = document.getElementById("schedule");
 
   if (gameDetails) {
     gameDetails.classList.add("hidden");
@@ -343,14 +388,17 @@ async function loadProfile() {
 // ============================================================================
 // LIVE UPDATES
 // ----------------------------------------------------------------------------
-// We poll /api/games every 10s so status flips (upcoming -> live -> finished)
-// and final scores show up without a refresh. A separate 1s timer ticks
-// the visible countdown so it doesn't feel laggy.
+// We poll /api/games every 10s so status flips and final scores show up
+// without a refresh. A separate 1s timer ticks the visible countdowns.
+//
+// When ANY countdown crosses 00:00 we fire an immediate "eager" poll instead
+// of waiting for the next 10s tick - this is what makes the upcoming -> live
+// flip and the live -> finished flip feel instant.
 // ============================================================================
 function startLiveUpdates() {
   if (!pollTimer) {
     pollTimer = setInterval(() => {
-      if (document.hidden) return; // pause when tab not visible
+      if (document.hidden) return;
       pollGames();
     }, 10000);
   }
@@ -360,51 +408,70 @@ function startLiveUpdates() {
 }
 
 async function pollGames() {
+  if (pollInFlight) return;
+  pollInFlight = true;
   try {
     const fresh = await getGamesData();
     const prev = games;
     games = fresh;
 
-    // Re-render the schedule list (cheap; only ~4 cards).
     renderSchedule();
 
-    // If we're sitting on a game's detail page and that game's status or
-    // score changed, re-render the detail too.
+    // If we're sitting on a game's detail page and that game changed, re-render.
     if (currentDetailGameId != null) {
       const newer = fresh.find(g => g.id === currentDetailGameId);
       const older = prev.find(g => g.id === currentDetailGameId);
       if (newer && (
         !older ||
-        newer.status     !== older.status ||
-        newer.homeScore  !== older.homeScore ||
-        newer.awayScore  !== older.awayScore
+        newer.status    !== older.status ||
+        newer.homeScore !== older.homeScore ||
+        newer.awayScore !== older.awayScore
       )) {
         showGame(newer);
-        // If a game we were viewing just finished, also refresh the user's
-        // bets and balance so any winnings show up immediately.
         if (newer.status === 'finished') {
           loadBets();
           loadProfile();
         }
+      } else if (!newer) {
+        // The game we were viewing got removed (replacement cleanup).
+        goBack();
       }
     }
   } catch (err) {
     // Quiet — most likely a transient network blip.
+  } finally {
+    pollInFlight = false;
   }
 }
 
 function updateCountdownDisplays() {
-  document.querySelectorAll('[data-start]').forEach(el => {
-    const startMs = Number(el.dataset.start);
-    const remaining = startMs - Date.now();
-    const target = el.querySelector('.countdown-time') || el;
+  const elements = document.querySelectorAll('[data-start], [data-end]');
+  let shouldEagerPoll = false;
+
+  elements.forEach(el => {
+    const targetMs = el.dataset.start
+      ? Number(el.dataset.start)
+      : Number(el.dataset.end);
+    const remaining = targetMs - Date.now();
+    const timeEl = el.querySelector('.countdown-time') || el;
 
     if (remaining <= 0) {
-      target.textContent = "00:00";
+      timeEl.textContent = "00:00";
+      // First time crossing zero -> ask the server for fresh state.
+      // The server's setTimeout fires at the same wall-clock instant, so
+      // by the time the response arrives (~100ms) the flip is already done.
+      if (!el.dataset.expired) {
+        el.dataset.expired = '1';
+        shouldEagerPoll = true;
+      }
     } else {
-      target.textContent = formatCountdown(remaining);
+      timeEl.textContent = formatCountdown(remaining);
     }
   });
+
+  if (shouldEagerPoll) {
+    pollGames();
+  }
 }
 
 // ============================================================================
