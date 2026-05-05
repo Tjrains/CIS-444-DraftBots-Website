@@ -59,9 +59,9 @@ const ONE_HOUR   = 60 * 60 * 1000;
 const TWO_HOURS  = 2  * ONE_HOUR;
 
 // Demo slot timing. Kept tight so the user can see the bet-and-payout
-// flow within ~2.5 min of server boot.
-const DEMO_START_DELAY_MS = 2 * 60 * 1000; // game starts 2 min after boot
-const DEMO_DURATION_MS    = 30 * 1000;     // game lasts 30 sec
+// flow within ~6 min of server boot.
+const DEMO_START_DELAY_MS = 5 * 60 * 1000; // game starts 5 min after boot
+const DEMO_DURATION_MS    = 60 * 1000;     // game lasts 1 min
 const DEMO_END_DELAY_MS   = DEMO_START_DELAY_MS + DEMO_DURATION_MS;
 
 // Realistic-ish score ranges per sport. Adjust to taste.
@@ -378,7 +378,7 @@ async function bootLifecycle() {
       console.log(`[lifecycle] Slot 2 LIVE: ${live.name} (${live.sport}), ends in 30 min.`);
     }
 
-    // Slot 3: short demo. Starts in 2 min, lasts 30 sec (ends 2.5 min from boot).
+    // Slot 3: short demo. Starts in 5 min, lasts 1 min (ends 6 min from boot).
     if (demo) {
       const startTime = new Date(now + DEMO_START_DELAY_MS).toISOString();
       const endTime   = new Date(now + DEMO_END_DELAY_MS).toISOString();
@@ -394,7 +394,7 @@ async function bootLifecycle() {
       );
       scheduleGoLive(demo.id,  DEMO_START_DELAY_MS);
       scheduleEndGame(demo.id, DEMO_END_DELAY_MS);
-      console.log(`[lifecycle] Slot 3 DEMO: ${demo.name} (${demo.sport}), starts in 2 min, lasts 30 sec.`);
+      console.log(`[lifecycle] Slot 3 DEMO: ${demo.name} (${demo.sport}), starts in 5 min, lasts 1 min.`);
     }
 
     // Slot 4+: regular upcoming games. Stagger start times so they don't
