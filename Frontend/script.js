@@ -385,6 +385,48 @@ async function loadProfile() {
   }
 }
 
+
+async function addFunds() {
+  const amountInput = document.getElementById("addFundsAmount");
+  const msg = document.getElementById("addFundsMsg");
+  const username = sessionStorage.getItem("username");
+  const amount = Number(amountInput?.value);
+
+  function showAddFundsMsg(text, type) {
+    if (!msg) return;
+    msg.textContent = text;
+    msg.className = `add-funds-msg ${type}`;
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    showAddFundsMsg("Please enter a valid amount.", "error");
+    return;
+  }
+
+  try {
+    const response = await fetch(`${API}/api/add-funds`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, amount })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      showAddFundsMsg(data.error ?? "Could not add funds.", "error");
+      return;
+    }
+
+    showAddFundsMsg(`Added $${amount.toFixed(2)} successfully.`, "success");
+    if (amountInput) amountInput.value = "";
+
+    await loadProfile();
+  } catch (err) {
+    console.error("Failed to add funds:", err);
+    showAddFundsMsg("Could not connect to server.", "error");
+  }
+}
+
 // ============================================================================
 // LIVE UPDATES
 // ----------------------------------------------------------------------------

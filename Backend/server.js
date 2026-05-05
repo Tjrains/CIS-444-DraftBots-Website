@@ -479,6 +479,60 @@ app.get('/api/profile', (req, res) => {
   );
 });
 
+
+// ADD FUNDS — demo-only deposit, no real payment processing.
+app.post('/api/add-funds', (req, res) => {
+  const { username, amount } = req.body;
+  const deposit = Number(amount);
+
+  if (!username || !Number.isFinite(deposit) || deposit <= 0) {
+    return res.status(400).json({ error: 'Valid username and amount are required.' });
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+
+  db.get(
+    `SELECT id, balance FROM users WHERE username = ?`,
+    [username],
+    (err, user) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Failed to load user.' });
+      }
+      if (!user) return res.status(404).json({ error: 'User not found.' });
+
+      const newBalance = +(Number(user.balance) + deposit).toFixed(2);
+
+      db.serialize(() => {
+        db.run('BEGIN TRANSACTION');
+
+        db.run(
+          `UPDATE users SET balance = ? WHERE id = ?`,
+          [newBalance, user.id]
+        );
+
+        db.run(
+          `INSERT INTO transactions (user_id, type, amount, date)
+           VALUES (?, 'Deposit', ?, ?)`,
+          [user.id, deposit, today]
+        );
+
+        db.run('COMMIT', (err) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Failed to add funds.' });
+          }
+
+          res.json({
+            message: 'Funds added successfully.',
+            balance: newBalance
+          });
+        });
+      });
+    }
+  );
+});
+
 // BETS
 app.get('/api/bets', (req, res) => {
   const { username } = req.query;
