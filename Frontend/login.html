@@ -19,6 +19,7 @@
       --red:    #e74c3c;
     }
 
+    /* Reset and Base */
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
@@ -85,6 +86,7 @@
     .auth-form { display: none; flex-direction: column; gap: 16px; }
     .auth-form.active { display: flex; }
 
+    /* Form Field Style */
     label {
       font-size: 12px;
       font-weight: 600;
@@ -139,6 +141,7 @@
 </head>
 <body>
 
+  <!-- Logo -->
   <div class="logo">
     <span class="logo-icon">✓✓</span>
     <span class="logo-text">DraftBots</span>
@@ -186,7 +189,9 @@
 
   </div>
 
+  <!-- INLINE SCRIPT -->
   <script>
+    /* API Base URL */
     const API =
       window.location.hostname === "localhost" ||
       window.location.hostname === "127.0.0.1" ||
