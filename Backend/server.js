@@ -715,6 +715,98 @@ app.post('/api/place-bet', (req, res) => {
   );
 });
 
+// CANCEL BET — flips a pending bet to 'cancelled' and refunds the wager
+app.delete('/api/bets/:id', (req, res) => {
+  const { username } = req.body;
+  const betId = Number(req.params.id);
+
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required.' });
+  }
+  if (!Number.isFinite(betId) || betId <= 0) {
+    return res.status(400).json({ error: 'Invalid bet id.' });
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+
+  db.get(
+    `SELECT id, balance FROM users WHERE username = ?`,
+    [username],
+    (err, user) => {
+      if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load user.' }); }
+      if (!user) return res.status(404).json({ error: 'User not found.' });
+
+      db.get(
+        `SELECT id, user_id, game, pick, amount, status FROM bets WHERE id = ?`,
+        [betId],
+        (err, bet) => {
+          if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load bet.' }); }
+          if (!bet) return res.status(404).json({ error: 'Bet not found.' });
+
+          if (bet.user_id !== user.id) {
+            return res.status(403).json({ error: 'You do not own this bet.' });
+          }
+          if (bet.status !== 'pending') {
+            return res.status(400).json({ error: 'Only pending bets can be cancelled.' });
+          }
+
+          db.get(
+            `SELECT id, status, start_time FROM games WHERE name = ?`,
+            [bet.game],
+            (err, game) => {
+              if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load game.' }); }
+              if (!game) return res.status(404).json({ error: 'Game not found.' });
+
+              if (game.status !== 'upcoming') {
+                return res.status(400).json({ error: 'Game has already started.' });
+              }
+              if (game.start_time && Date.now() >= new Date(game.start_time).getTime()) {
+                return res.status(400).json({ error: 'Game has already started.' });
+              }
+
+              const refund = +Number(bet.amount).toFixed(2);
+
+              db.serialize(() => {
+                db.run('BEGIN TRANSACTION');
+
+                db.run(
+                  `UPDATE bets SET status = 'cancelled' WHERE id = ?`,
+                  [bet.id]
+                );
+
+                db.run(
+                  `UPDATE users SET balance = balance + ? WHERE id = ?`,
+                  [refund, user.id]
+                );
+
+                db.run(
+                  `INSERT INTO transactions (user_id, type, amount, date)
+                   VALUES (?, ?, ?, ?)`,
+                  [user.id, `Bet Cancelled - ${bet.pick}`, refund, today]
+                );
+
+                db.run('COMMIT', (err) => {
+                  if (err) {
+                    console.error(err);
+                    return res.status(500).json({ error: 'Failed to cancel bet.' });
+                  }
+
+                  res.json({
+                    id: bet.id,
+                    status: 'cancelled',
+                    refunded: refund,
+                    newBalance: +(user.balance + refund).toFixed(2)
+                  });
+                });
+              });
+            }
+          );
+        }
+      );
+    }
+  );
+});
+
 // DEBUG
 app.get('/api/debug/all', (req, res) => {
   db.all('SELECT * FROM users', [], (err, users) => {

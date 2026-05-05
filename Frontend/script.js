@@ -317,11 +317,20 @@ async function loadBets() {
       const div = document.createElement("div");
       div.className = "bet-card";
 
-      const isWon  = bet.status === "won";
-      const isLost = bet.status === "lost";
-      const amountText = isWon
-        ? `+$${Number(bet.payout).toFixed(2)}`
-        : `-$${Number(bet.amount).toFixed(2)}`;
+      const isWon       = bet.status === "won";
+      const isLost      = bet.status === "lost";
+      const isPending   = bet.status === "pending";
+      const isCancelled = bet.status === "cancelled";
+
+      const amountText = isCancelled
+        ? "—"
+        : isWon
+          ? `+$${Number(bet.payout).toFixed(2)}`
+          : `-$${Number(bet.amount).toFixed(2)}`;
+
+      const cancelBtn = isPending
+        ? `<button class="cancel-bet-btn" onclick="cancelBet(${bet.id})">Cancel</button>`
+        : "";
 
       div.innerHTML = `
         <div>
@@ -333,6 +342,7 @@ async function loadBets() {
           <span class="tx-amount ${isWon ? "positive" : isLost ? "negative" : ""}">
             ${amountText}
           </span>
+          ${cancelBtn}
         </div>
       `;
       betsList.appendChild(div);
@@ -587,6 +597,34 @@ async function submitBet() {
     console.error("Failed to place bet:", err);
     showError("Network error. Please try again.");
     if (submitBtn) submitBtn.disabled = false;
+  }
+}
+
+async function cancelBet(betId) {
+  if (!betId) return;
+  if (!confirm("Cancel this bet and refund your wager?")) return;
+
+  try {
+    const response = await fetch(`${API}/api/bets/${betId}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: sessionStorage.getItem("username")
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.error ?? "Failed to cancel bet.");
+      return;
+    }
+
+    await loadProfile();
+    await loadBets();
+  } catch (err) {
+    console.error("Failed to cancel bet:", err);
+    alert("Network error. Please try again.");
   }
 }
 
