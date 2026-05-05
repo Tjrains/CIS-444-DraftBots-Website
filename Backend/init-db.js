@@ -1,17 +1,26 @@
+// Import SQLite, the database
 const sqlite3 = require('sqlite3').verbose();
+// Import path, makes the database work on any operating system
 const path = require('path');
+// Import crypto, allows for password hashing
 const crypto = require('crypto');
+
+// Function for hashing passwords before inserting the starting user
 function hashPassword(p) { return crypto.createHash('sha1').update(p).digest('hex'); }
 
+// Creates the database file
 const dbPath = path.join(__dirname, 'draftbots.db');
 const db = new sqlite3.Database(dbPath);
 
+// serialize() makes sure the commands run in order
 db.serialize(() => {
+  // Drop the exisiting tables
   db.run(`DROP TABLE IF EXISTS transactions`);
   db.run(`DROP TABLE IF EXISTS bets`);
   db.run(`DROP TABLE IF EXISTS games`);
   db.run(`DROP TABLE IF EXISTS users`);
 
+  // Creates the users table
   db.run(`
     CREATE TABLE users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,6 +33,7 @@ db.serialize(() => {
     )
   `);
 
+  // Creates the transactions table
   db.run(`
     CREATE TABLE transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +45,7 @@ db.serialize(() => {
     )
   `);
 
+  // Creates the bets table
   db.run(`
     CREATE TABLE bets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +62,7 @@ db.serialize(() => {
     )
   `);
 
-  // games table tracks the lifecycle (start/end times) and the final score
+  // Creates the games table
   db.run(`
     CREATE TABLE games (
       id INTEGER PRIMARY KEY,
@@ -66,18 +77,21 @@ db.serialize(() => {
     )
   `);
 
+  // The demo user
   db.run(
     `INSERT INTO users (id, username, email, created_at, status, balance, password)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
     [1, 'tyler', 'tyler@example.com', '2026-04-01', 'Active', 125, hashPassword('password123')]
   );
 
+  // The starting profile's transaction history
   const transactions = [
     ['Deposit', 100, '2026-04-01'],
     ['Bet', -15, '2026-04-05'],
     ['Win', 40, '2026-04-05']
   ];
 
+  // Reusable insert statement for transactions
   const txStmt = db.prepare(
     `INSERT INTO transactions (user_id, type, amount, date) VALUES (?, ?, ?, ?)`
   );
@@ -92,6 +106,7 @@ db.serialize(() => {
     ['Nashville High Notes vs New York Empire',      'Soccer',   'Over 2.5 Goals',             10, -105, 19.52, 'live',    '2026-04-14']
   ];
 
+  // Reusable insert statement for bets
   const betStmt = db.prepare(`
     INSERT INTO bets (user_id, game, sport, pick, amount, odds, payout, status, date)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -147,6 +162,7 @@ db.serialize(() => {
     ]
   ];
 
+  // Reusable insert statement for games
   const gameStmt = db.prepare(
     `INSERT INTO games (id, name, sport, status, bets, home_score, away_score)
      VALUES (?, ?, ?, ?, ?, ?, ?)`
@@ -155,6 +171,7 @@ db.serialize(() => {
   gameStmt.finalize();
 });
 
+// Closes the database connection after it finishes setup
 db.close(() => {
   console.log('Database initialized at backend/draftbots.db');
 });

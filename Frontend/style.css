@@ -186,23 +186,111 @@ main { max-width: 960px; margin: 0 auto; padding: 28px 20px; }
 .stat-value { font-size: 22px; font-weight: 700; }
 .stat-value.green { color: var(--green); }
 
-/* === TRANSACTIONS === */
-.transaction-list { list-style: none; display: flex; flex-direction: column; gap: 8px; }
 
-.transaction-list li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* === ADD FUNDS === */
+.add-funds-card {
   background-color: var(--card);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 12px 16px;
-  font-size: 14px;
+  border-radius: 8px;
+  padding: 18px;
+  margin-bottom: 16px;
 }
 
-.tx-date { color: var(--muted); font-size: 12px; }
-.tx-amount.positive { color: var(--green); font-weight: 600; }
-.tx-amount.negative { color: var(--red); font-weight: 600; }
+.add-funds-card .sub-title {
+  margin-top: 0;
+}
+
+.add-funds-row {
+  display: flex;
+  gap: 10px;
+}
+
+.add-funds-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  background-color: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-family: 'Barlow', sans-serif;
+  font-size: 15px;
+}
+
+.add-funds-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.add-funds-row button {
+  padding: 10px 16px;
+  background-color: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-family: 'Barlow', sans-serif;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.add-funds-row button:hover {
+  opacity: 0.9;
+}
+
+.add-funds-msg {
+  margin-top: 10px;
+  font-size: 13px;
+}
+
+.add-funds-msg.success {
+  color: var(--green);
+}
+
+.add-funds-msg.error {
+  color: var(--red);
+}
+
+/* === TRANSACTIONS === */
+
+.transaction-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transaction-list li {
+  display: grid;
+  grid-template-columns: 1fr 160px 140px;
+  align-items: center;
+
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+
+  padding: 18px 22px;
+  font-size: 15px;
+}
+
+.tx-date {
+  color: var(--muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.tx-amount {
+  text-align: right;
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.tx-amount.positive {
+  color: var(--green);
+}
+
+.tx-amount.negative {
+  color: var(--red);
+}
 
 /* === BETS === */
 .bet-card {

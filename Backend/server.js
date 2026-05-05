@@ -146,10 +146,11 @@ function generateBetsForSport(home, away, sport) {
     { label: `Under ${total}`,     type: 'total',  direction: 'under', line: total, odds: -110 }
   ];
 }
-
-// ----- timer registry -----
+// ============================================================================
+// TIMER REGISTRY
 // One game can have a go-live timer + an end-game timer at the same time.
 // Keep a registry so re-scheduling on boot can cancel previous ones.
+// ============================================================================
 const activeTimers = new Map(); // gameId -> { goLive, endGame }
 
 function cancelAllTimers() {
@@ -283,10 +284,12 @@ async function enforceFinishedLimit() {
   console.log(`[lifecycle] Replacement created: ${oldest.name} now playing ${newSport} (id=${newId}, starts in 5 min).`);
 }
 
-// ----- boot -----
+// ============================================================================
+// BOOT
 // Always reset to the demo state on every server boot.
 // Render's free tier spins the server down after idle, so each "real" boot
 // gives a user a fresh 5-min demo window to bet+payout in.
+// ============================================================================
 async function ensureSchema() {
   const cols = await dbAll(`PRAGMA table_info(games)`);
   const have = new Set(cols.map(c => c.name));
@@ -427,20 +430,30 @@ async function bootLifecycle() {
 
 // ============================================================================
 // ROUTES
+// API endpoints that the frontend calls to interact with the backend
+// These routes handle profile data, balances, bets, authentication, and game.
 // ============================================================================
 
+// Basic test route to confirm the backend server is online
 app.get('/', (req, res) => {
   res.send('DraftBots backend is running.');
 });
 
-// PROFILE
+// ============================================================================
+// PROFILE ROUTE
+// // ============================================================================
+
+// Returns the profile information and transaction history for a user
 app.get('/api/profile', (req, res) => {
+  // Gets the username from the query string
   const { username } = req.query;
 
+  // Rejects the request if no username was provided.
   if (!username) {
     return res.status(400).json({ error: 'Username is required.' });
   }
 
+  // Look up the user's profile information in the database
   db.get(
     `SELECT id, username, email, created_at, status, balance
        FROM users
@@ -453,6 +466,7 @@ app.get('/api/profile', (req, res) => {
       }
       if (!user) return res.status(404).json({ error: 'User not found' });
 
+      // Load the user's transaction history
       db.all(
         `SELECT type, amount, date
            FROM transactions
@@ -465,6 +479,7 @@ app.get('/api/profile', (req, res) => {
             return res.status(500).json({ error: 'Failed to load transactions' });
           }
 
+          // Send the completed profile response back to the frontend
           res.json({
             username: user.username,
             email: user.email,
@@ -479,14 +494,91 @@ app.get('/api/profile', (req, res) => {
   );
 });
 
-// BETS
-app.get('/api/bets', (req, res) => {
-  const { username } = req.query;
+// ============================================================================
+// ADD FUNDS ROUTE
+// ============================================================================
 
-  if (!username) {
-    return res.status(400).json({ error: 'Username is required.' });
+app.post('/api/add-funds', (req, res) => {
+  // Read the submitted username and amount, then convert amount into a number
+  const { username, amount } = req.body;
+  const deposit = Number(amount);
+
+  // Validate, the value just has to be a positive number
+  if (!username || !Number.isFinite(deposit) || deposit <= 0) {
+    return res.status(400).json({ error: 'Valid username and amount are required.' });
   }
 
+  // Generate today's date for the transaction history
+  const today = new Date().toISOString().split('T')[0];
+
+  // look up the user in the database
+  db.get(
+    `SELECT id, balance FROM users WHERE username = ?`,
+    [username],
+    (err, user) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Failed to load user.' });
+      }
+      if (!user) return res.status(404).json({ error: 'User not found.' });
+
+      // Calculate the updated balance to 2 decimal places
+      const newBalance = +(Number(user.balance) + deposit).toFixed(2);
+
+      // serialize() keeps the commands in order
+      db.serialize(() => {
+        // Begins the transaction, helps to prevent partial updates if something goes wrong
+        db.run('BEGIN TRANSACTION');
+
+        // Updates the user's balance
+        db.run(
+          `UPDATE users SET balance = ? WHERE id = ?`,
+          [newBalance, user.id]
+        );
+
+        // Insert a transaction history entry
+        db.run(
+          `INSERT INTO transactions (user_id, type, amount, date)
+           VALUES (?, 'Deposit', ?, ?)`,
+          [user.id, deposit, today]
+        );
+
+        // Finalize all changes
+        db.run('COMMIT', (err) => {
+          if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Failed to add funds.' });
+          }
+
+          // Send the updated balance back to the frontend
+          res.json({
+            message: 'Funds added successfully.',
+            balance: newBalance
+          });
+        });
+      });
+    }
+  );
+});
+
+// ============================================================================
+// BETS ROUTE
+// ============================================================================
+// Returns all bets placed by a specific user.
+app.get('/api/bets', (req, res) => {
+
+  // Read username from the query string.
+  // Example: /api/bets?username=tyler
+  const { username } = req.query;
+
+  // Reject request if username was not provided.
+  if (!username) {
+    return res.status(400).json({
+      error: 'Username is required.'
+    });
+  }
+
+  // Load all bets associated with the user.
   db.all(
     `SELECT b.id, b.game, b.sport, b.pick, b.amount, b.odds, b.payout, b.status, b.date
        FROM bets b
@@ -494,18 +586,31 @@ app.get('/api/bets', (req, res) => {
       WHERE u.username = ?
       ORDER BY b.id DESC`,
     [username],
+
+    // Callback runs after the database query finishes.
     (err, bets) => {
+
+      // Handle database query errors.
       if (err) {
         console.error(err);
-        return res.status(500).json({ error: 'Failed to load bets' });
+        return res.status(500).json({
+          error: 'Failed to load bets'
+        });
       }
+
+      // Return all bets to the frontend.
       res.json(bets);
     }
   );
 });
 
-// GAMES — returns lifecycle timestamps and final scores
+// ============================================================================
+// GAMES ROUTE
+// ============================================================================
+// Returns all games, including lifecycle timing and final scores.
 app.get('/api/games', (req, res) => {
+
+  // Load all games from the database.
   db.all(
     `SELECT id, name, sport, status, bets, start_time, end_time, home_score, away_score
        FROM games
@@ -517,188 +622,379 @@ app.get('/api/games', (req, res) => {
           ELSE 3
         END,
         id ASC`,
+
+    // Callback runs after the database query finishes.
     (err, rows) => {
+
+      // Handle database query errors.
       if (err) {
         console.error(err);
-        return res.status(500).json({ error: 'Failed to load games' });
+        return res.status(500).json({
+          error: 'Failed to load games'
+        });
       }
 
+      // Convert database rows into frontend-friendly objects.
       const games = rows.map(row => {
+
+        // Stored bets are saved as JSON strings in SQLite.
+        // Convert them back into JavaScript arrays.
         let bets = [];
-        try { bets = JSON.parse(row.bets || '[]'); } catch (_) { bets = []; }
+
+        try {
+          bets = JSON.parse(row.bets || '[]');
+        } catch (_) {
+
+          // If parsing fails, safely fall back to an empty array.
+          bets = [];
+        }
+
+        // Return cleaned game object.
         return {
           id: row.id,
           name: row.name,
           sport: row.sport,
           status: row.status,
           bets,
+
+          // Lifecycle timing.
           startTime: row.start_time,
-          endTime:   row.end_time,
+          endTime: row.end_time,
+
+          // Final score values.
           homeScore: row.home_score,
           awayScore: row.away_score
         };
       });
 
+      // Send games array back to frontend.
       res.json(games);
     }
   );
 });
 
-// REGISTER
+// ============================================================================
+// REGISTER ROUTE
+// ============================================================================
+// Creates a new user account.
 app.post('/api/register', (req, res) => {
+
+  // Read registration form values from the request body.
   const { username, email, password } = req.body;
 
+  // Validate required fields.
   if (!username || !email || !password) {
-    return res.status(400).json({ error: 'All fields are required.' });
+    return res.status(400).json({
+      error: 'All fields are required.'
+    });
   }
 
+  // Hash password before storing it in the database.
   const hashed = hashPassword(password);
-  const today  = new Date().toISOString().split('T')[0];
 
+  // Generate today's date for account creation.
+  const today = new Date().toISOString().split('T')[0];
+
+  // Insert the new user into the database.
   db.run(
     `INSERT INTO users (username, email, created_at, status, balance, password)
      VALUES (?, ?, ?, 'Active', 100.00, ?)`,
     [username, email, today, hashed],
+
+    // Callback runs after INSERT finishes.
     function (err) {
+
+      // Handle duplicate usernames.
       if (err) {
+
         if (err.message.includes('UNIQUE')) {
-          return res.status(409).json({ error: 'Username already taken.' });
+          return res.status(409).json({
+            error: 'Username already taken.'
+          });
         }
+
+        // Handle general registration errors.
         console.error(err);
-        return res.status(500).json({ error: 'Registration failed.' });
+
+        return res.status(500).json({
+          error: 'Registration failed.'
+        });
       }
-      res.status(201).json({ message: 'Account created successfully.' });
-    }
-  );
-});
 
-// LOGIN
-app.post('/api/login', (req, res) => {
-  const { username, password } = req.body;
-
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password are required.' });
-  }
-
-  const hashed = hashPassword(password);
-
-  db.get(
-    `SELECT id, username, email, status, balance
-       FROM users
-      WHERE username = ? AND password = ?`,
-    [username, hashed],
-    (err, user) => {
-      if (err) {
-        console.error(err);
-        return res.status(500).json({ error: 'Login failed.' });
-      }
-      if (!user) return res.status(401).json({ error: 'Invalid username or password.' });
-
-      res.json({
-        username: user.username,
-        email:    user.email,
-        status:   user.status,
-        balance:  user.balance
+      // Return success response.
+      res.status(201).json({
+        message: 'Account created successfully.'
       });
     }
   );
 });
 
-// PLACE BET — pulls odds from the structured bet definition and rejects
-// bets that arrive after the game's start_time.
+// ============================================================================
+// LOGIN ROUTE
+// ============================================================================
+// Verifies username and password credentials.
+app.post('/api/login', (req, res) => {
+
+  // Read login credentials from the request body.
+  const { username, password } = req.body;
+
+  // Validate required fields.
+  if (!username || !password) {
+    return res.status(400).json({
+      error: 'Username and password are required.'
+    });
+  }
+
+  // Hash submitted password for comparison with database.
+  const hashed = hashPassword(password);
+
+  // Attempt to find a matching user.
+  db.get(
+    `SELECT id, username, email, status, balance
+       FROM users
+      WHERE username = ? AND password = ?`,
+    [username, hashed],
+
+    // Callback runs after database lookup finishes.
+    (err, user) => {
+
+      // Handle database errors.
+      if (err) {
+        console.error(err);
+
+        return res.status(500).json({
+          error: 'Login failed.'
+        });
+      }
+
+      // Reject invalid login credentials.
+      if (!user) {
+        return res.status(401).json({
+          error: 'Invalid username or password.'
+        });
+      }
+
+      // Return logged-in user information.
+      res.json({
+        username: user.username,
+        email: user.email,
+        status: user.status,
+        balance: user.balance
+      });
+    }
+  );
+});
+
+// ============================================================================
+// PLACE BET ROUTE
+// ============================================================================
+// Places a new bet and removes money from the user's balance.
 app.post('/api/place-bet', (req, res) => {
+
+  // Read submitted bet data from the frontend.
   const { username, gameId, pick, amount } = req.body;
 
+  // Validate required fields.
   if (!username || !gameId || !pick || amount === undefined) {
-    return res.status(400).json({ error: 'All fields are required.' });
+    return res.status(400).json({
+      error: 'All fields are required.'
+    });
   }
 
+  // Convert wager into a number.
   const wager = Number(amount);
+
+  // Ensure wager is valid and positive.
   if (!Number.isFinite(wager) || wager <= 0) {
-    return res.status(400).json({ error: 'Wager must be greater than 0.' });
+    return res.status(400).json({
+      error: 'Wager must be greater than 0.'
+    });
   }
 
+  // Generate today's date for transaction history.
   const today = new Date().toISOString().split('T')[0];
 
+  // Find the user placing the bet.
   db.get(
     `SELECT id, balance FROM users WHERE username = ?`,
     [username],
-    (err, user) => {
-      if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load user.' }); }
-      if (!user) return res.status(404).json({ error: 'User not found.' });
-      if (user.balance < wager) return res.status(400).json({ error: 'Insufficient balance.' });
 
+    // Callback after user lookup finishes.
+    (err, user) => {
+
+      // Handle database errors.
+      if (err) {
+        console.error(err);
+
+        return res.status(500).json({
+          error: 'Failed to load user.'
+        });
+      }
+
+      // Reject missing users.
+      if (!user) {
+        return res.status(404).json({
+          error: 'User not found.'
+        });
+      }
+
+      // Reject wagers larger than available balance.
+      if (user.balance < wager) {
+        return res.status(400).json({
+          error: 'Insufficient balance.'
+        });
+      }
+
+      // Find the selected game.
       db.get(
         `SELECT id, name, sport, status, bets, start_time
            FROM games
           WHERE id = ?`,
         [gameId],
+
+        // Callback after game lookup finishes.
         (err, game) => {
-          if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load game.' }); }
-          if (!game) return res.status(404).json({ error: 'Game not found.' });
 
+          // Handle database errors.
+          if (err) {
+            console.error(err);
+
+            return res.status(500).json({
+              error: 'Failed to load game.'
+            });
+          }
+
+          // Reject invalid game IDs.
+          if (!game) {
+            return res.status(404).json({
+              error: 'Game not found.'
+            });
+          }
+
+          // Only allow bets before the game starts.
           if (game.status !== 'upcoming') {
-            return res.status(400).json({ error: 'Bets are only allowed on upcoming games.' });
-          }
-          // Defensive: refuse any bet placed at or after the scheduled lock
-          // time, even if the status flip hasn't fired yet.
-          if (game.start_time && Date.now() >= new Date(game.start_time).getTime()) {
-            return res.status(400).json({ error: 'Betting has closed for this game.' });
+            return res.status(400).json({
+              error: 'Bets are only allowed on upcoming games.'
+            });
           }
 
+          // Extra safety check in case lifecycle timing has not updated yet.
+          if (
+            game.start_time &&
+            Date.now() >= new Date(game.start_time).getTime()
+          ) {
+            return res.status(400).json({
+              error: 'Betting has closed for this game.'
+            });
+          }
+
+          // Parse valid betting options stored in the game.
           let validPicks = [];
+
           try {
             validPicks = JSON.parse(game.bets || '[]');
+
           } catch (parseErr) {
+
             console.error(parseErr);
-            return res.status(500).json({ error: 'Game bet options are invalid.' });
+
+            return res.status(500).json({
+              error: 'Game bet options are invalid.'
+            });
           }
 
-          // Find the structured bet so we know the real odds.
-          // Fallback to -110 for legacy string-only definitions.
+          // Find the exact bet definition selected by the user.
           let betDef = null;
-          if (validPicks.length && typeof validPicks[0] === 'object') {
+
+          // New structured betting system.
+          if (
+            validPicks.length &&
+            typeof validPicks[0] === 'object'
+          ) {
+
             betDef = validPicks.find(b => b.label === pick);
-            if (!betDef) return res.status(400).json({ error: 'Invalid pick for this game.' });
-          } else {
-            if (!validPicks.includes(pick)) {
-              return res.status(400).json({ error: 'Invalid pick for this game.' });
+
+            // Reject invalid picks.
+            if (!betDef) {
+              return res.status(400).json({
+                error: 'Invalid pick for this game.'
+              });
             }
+
+          } else {
+
+            // Legacy string-only fallback system.
+            if (!validPicks.includes(pick)) {
+              return res.status(400).json({
+                error: 'Invalid pick for this game.'
+              });
+            }
+
             betDef = { odds: -110 };
           }
 
+          // Pull betting odds from the definition.
           const odds = betDef.odds;
+
+          // Calculate total payout including original wager.
           const payout = +(odds < 0
             ? wager * (1 + 100 / Math.abs(odds))
             : wager * (1 + odds / 100)
           ).toFixed(2);
 
+          // serialize() forces all database actions to run in order.
           db.serialize(() => {
+
+            // Start transaction to prevent partial updates.
             db.run('BEGIN TRANSACTION');
 
+            // Remove wager from user balance.
             db.run(
               `UPDATE users SET balance = balance - ? WHERE id = ?`,
               [wager, user.id]
             );
 
+            // Insert the bet into betting history.
             db.run(
               `INSERT INTO bets (user_id, game, sport, pick, amount, odds, payout, status, date)
                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)`,
-              [user.id, game.name, game.sport, pick, wager, odds, payout, today]
+              [
+                user.id,
+                game.name,
+                game.sport,
+                pick,
+                wager,
+                odds,
+                payout,
+                today
+              ]
             );
 
+            // Insert transaction history entry.
             db.run(
               `INSERT INTO transactions (user_id, type, amount, date)
                VALUES (?, ?, ?, ?)`,
-              [user.id, `Bet - ${pick}`, -wager, today]
+              [
+                user.id,
+                `Bet - ${pick}`,
+                -wager,
+                today
+              ]
             );
 
+            // Finalize database changes.
             db.run('COMMIT', (err) => {
+
+              // Handle transaction errors.
               if (err) {
                 console.error(err);
-                return res.status(500).json({ error: 'Failed to place bet.' });
+
+                return res.status(500).json({
+                  error: 'Failed to place bet.'
+                });
               }
 
+              // Return completed bet information.
               res.status(201).json({
                 pick,
                 amount: wager,
@@ -715,82 +1011,170 @@ app.post('/api/place-bet', (req, res) => {
   );
 });
 
-// CANCEL BET — flips a pending bet to 'cancelled' and refunds the wager
+// ============================================================================
+// CANCEL BET ROUTE
+// ============================================================================
+// Cancels a pending bet and refunds the wager back to the user's balance.
 app.delete('/api/bets/:id', (req, res) => {
+
+  // Get the username from the request body.
   const { username } = req.body;
+
+  // Convert the bet id from the URL into a number.
+  // Example: /api/bets/3
   const betId = Number(req.params.id);
 
+  // Make sure a username was provided.
   if (!username) {
-    return res.status(400).json({ error: 'Username is required.' });
-  }
-  if (!Number.isFinite(betId) || betId <= 0) {
-    return res.status(400).json({ error: 'Invalid bet id.' });
+    return res.status(400).json({
+      error: 'Username is required.'
+    });
   }
 
+  // Make sure the bet id is valid.
+  if (!Number.isFinite(betId) || betId <= 0) {
+    return res.status(400).json({
+      error: 'Invalid bet id.'
+    });
+  }
+
+  // Generate today's date for the refund transaction.
   const today = new Date().toISOString().split('T')[0];
 
+  // Find the user who is trying to cancel the bet.
   db.get(
     `SELECT id, balance FROM users WHERE username = ?`,
     [username],
     (err, user) => {
-      if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load user.' }); }
-      if (!user) return res.status(404).json({ error: 'User not found.' });
 
+      // Handle database errors.
+      if (err) {
+        console.error(err);
+        return res.status(500).json({
+          error: 'Failed to load user.'
+        });
+      }
+
+      // Reject request if the user does not exist.
+      if (!user) {
+        return res.status(404).json({
+          error: 'User not found.'
+        });
+      }
+
+      // Find the bet being cancelled.
       db.get(
         `SELECT id, user_id, game, pick, amount, status FROM bets WHERE id = ?`,
         [betId],
         (err, bet) => {
-          if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load bet.' }); }
-          if (!bet) return res.status(404).json({ error: 'Bet not found.' });
 
+          // Handle database errors.
+          if (err) {
+            console.error(err);
+            return res.status(500).json({
+              error: 'Failed to load bet.'
+            });
+          }
+
+          // Reject request if the bet does not exist.
+          if (!bet) {
+            return res.status(404).json({
+              error: 'Bet not found.'
+            });
+          }
+
+          // Make sure the bet belongs to the logged-in user.
           if (bet.user_id !== user.id) {
-            return res.status(403).json({ error: 'You do not own this bet.' });
-          }
-          if (bet.status !== 'pending') {
-            return res.status(400).json({ error: 'Only pending bets can be cancelled.' });
+            return res.status(403).json({
+              error: 'You do not own this bet.'
+            });
           }
 
+          // Only pending bets can be cancelled.
+          if (bet.status !== 'pending') {
+            return res.status(400).json({
+              error: 'Only pending bets can be cancelled.'
+            });
+          }
+
+          // Find the game connected to this bet.
           db.get(
             `SELECT id, status, start_time FROM games WHERE name = ?`,
             [bet.game],
             (err, game) => {
-              if (err) { console.error(err); return res.status(500).json({ error: 'Failed to load game.' }); }
-              if (!game) return res.status(404).json({ error: 'Game not found.' });
 
+              // Handle database errors.
+              if (err) {
+                console.error(err);
+                return res.status(500).json({
+                  error: 'Failed to load game.'
+                });
+              }
+
+              // Reject request if the game does not exist.
+              if (!game) {
+                return res.status(404).json({
+                  error: 'Game not found.'
+                });
+              }
+
+              // Do not allow cancelling once the game is live or finished.
               if (game.status !== 'upcoming') {
-                return res.status(400).json({ error: 'Game has already started.' });
-              }
-              if (game.start_time && Date.now() >= new Date(game.start_time).getTime()) {
-                return res.status(400).json({ error: 'Game has already started.' });
+                return res.status(400).json({
+                  error: 'Game has already started.'
+                });
               }
 
+              // Extra safety check using the scheduled start time.
+              if (
+                game.start_time &&
+                Date.now() >= new Date(game.start_time).getTime()
+              ) {
+                return res.status(400).json({
+                  error: 'Game has already started.'
+                });
+              }
+
+              // Refund amount is the original wager amount.
               const refund = +Number(bet.amount).toFixed(2);
 
+              // Run cancellation, refund, and transaction insert in order.
               db.serialize(() => {
+
+                // Begin transaction so all updates happen together.
                 db.run('BEGIN TRANSACTION');
 
+                // Mark the bet as cancelled.
                 db.run(
                   `UPDATE bets SET status = 'cancelled' WHERE id = ?`,
                   [bet.id]
                 );
 
+                // Add the refund back to the user's balance.
                 db.run(
                   `UPDATE users SET balance = balance + ? WHERE id = ?`,
                   [refund, user.id]
                 );
 
+                // Add refund to transaction history.
                 db.run(
                   `INSERT INTO transactions (user_id, type, amount, date)
                    VALUES (?, ?, ?, ?)`,
                   [user.id, `Bet Cancelled - ${bet.pick}`, refund, today]
                 );
 
+                // Commit all database changes.
                 db.run('COMMIT', (err) => {
+
+                  // Handle commit failure.
                   if (err) {
                     console.error(err);
-                    return res.status(500).json({ error: 'Failed to cancel bet.' });
+                    return res.status(500).json({
+                      error: 'Failed to cancel bet.'
+                    });
                   }
 
+                  // Return updated cancellation data to the frontend.
                   res.json({
                     id: bet.id,
                     status: 'cancelled',
@@ -807,22 +1191,51 @@ app.delete('/api/bets/:id', (req, res) => {
   );
 });
 
-// DEBUG
+// ============================================================================
+// DEBUG ROUTE
+// ============================================================================
+// Development-only route that returns raw database contents.
+// Useful for checking users, bets, and games while testing locally.
 app.get('/api/debug/all', (req, res) => {
+
+  // Load every user from the database.
   db.all('SELECT * FROM users', [], (err, users) => {
-    if (err) return res.status(500).json(err);
+    if (err) {
+      return res.status(500).json(err);
+    }
+
+    // Load every bet from the database.
     db.all('SELECT * FROM bets', [], (err2, bets) => {
-      if (err2) return res.status(500).json(err2);
+      if (err2) {
+        return res.status(500).json(err2);
+      }
+
+      // Load every game from the database.
       db.all('SELECT * FROM games', [], (err3, games) => {
-        if (err3) return res.status(500).json(err3);
-        res.json({ users, bets, games });
+        if (err3) {
+          return res.status(500).json(err3);
+        }
+
+        // Return everything together for debugging.
+        res.json({
+          users,
+          bets,
+          games
+        });
       });
     });
   });
 });
 
+// ============================================================================
+// SERVER STARTUP
+// ============================================================================
+// Starts the backend server and begins the automatic game lifecycle.
 app.listen(PORT, () => {
+
+  // Confirm the server is running.
   console.log(`DraftBots backend running on http://localhost:${PORT}`);
-  // Kick off the game lifecycle as soon as the server is up.
+
+  // Start game timers when the backend boots.
   bootLifecycle();
 });
