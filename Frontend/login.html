@@ -187,9 +187,12 @@
   </div>
 
   <script>
-    const API = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-      ? "http:localhost:3000"
-      : "https://draftbots.onrender.com"
+    const API =
+      window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.protocol === "file:"
+        ? "http://localhost:3000"
+        : "https://draftbots.onrender.com";
 
     // Switch between the Login and Register tabs
     function switchTab(tab, btn) {

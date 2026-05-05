@@ -20,9 +20,12 @@ const teams = [
   { name: "Bot Hotel", offense: 77, defense: 82 }
 ];
 
-const API = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
-  ? "http://localhost:3000"
-  : "https://draftbots.onrender.com";
+const API =
+  window.location.hostname === "localhost" ||
+  window.location.hostname === "127.0.0.1" ||
+  window.location.protocol === "file:"
+    ? "http://localhost:3000"
+    : "https://draftbots.onrender.com";
 
 function openTab(tabId, btnElement) {
   document.querySelectorAll(".tab-content").forEach(section => {
