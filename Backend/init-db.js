@@ -80,10 +80,10 @@ db.serialize(() => {
   txStmt.finalize();
 
   const bets = [
-    ['Bot Alpha vs Bot Bravo', 'Football', 'Bot Alpha -3.5', 20, -110, 38.18, 'won', '2026-04-10'],
-    ['Bot Echo vs Bot Foxtrot', 'Boxing', 'Bot Foxtrot +130', 15, 130, 34.50, 'lost', '2026-04-11'],
-    ['Bot Golf vs Bot Hotel', 'Curling', 'Bot Golf -2', 25, -115, 46.74, 'pending', '2026-04-14'],
-    ['Bot Charlie vs Bot Delta', 'Soccer', 'Over 2.5 Goals', 10, -105, 19.52, 'live', '2026-04-14']
+    ['Austin Armadillos vs Portland Stormchasers', 'Football', 'Bot Alpha -3.5', 20, -110, 38.18, 'won', '2026-04-10'],
+    ['El Paso Desert Wolves vs Boise Potato Kings', 'Boxing', 'Bot Foxtrot +130', 15, 130, 34.50, 'lost', '2026-04-11'],
+    ['Minneapolis Northstars vs San Diego Sun Rays', 'Curling', 'Bot Golf -2', 25, -115, 46.74, 'pending', '2026-04-14'],
+    ['Nashville High Notes vs New York Empire', 'Soccer', 'Over 2.5 Goals', 10, -105, 19.52, 'live', '2026-04-14']
   ];
 
   const betStmt = db.prepare(`
@@ -94,10 +94,10 @@ db.serialize(() => {
   betStmt.finalize();
 
   const games = [
-    [1, 'Bot Alpha vs Bot Bravo', 'Football', 'upcoming', JSON.stringify(['Bot Alpha -3.5', 'Bot Bravo +3.5', 'Over 42.5', 'Under 42.5'])],
-    [2, 'Bot Charlie vs Bot Delta', 'Soccer', 'live', JSON.stringify([])],
-    [3, 'Bot Echo vs Bot Foxtrot', 'Boxing', 'upcoming', JSON.stringify(['Bot Echo -150', 'Bot Foxtrot +130'])],
-    [4, 'Bot Golf vs Bot Hotel', 'Curling', 'upcoming', JSON.stringify(['Bot Golf -2', 'Bot Hotel +2'])]
+    [1, 'Austin Armadillos vs Portland Stormchasers', 'Football', 'finished', JSON.stringify(['Bot Alpha -3.5', 'Bot Bravo +3.5', 'Over 42.5', 'Under 42.5'])],
+    [2, 'Nashville High Notes vs New York Empire', 'Soccer', 'live', JSON.stringify([])],
+    [3, 'El Paso Desert Wolves vs Boise Potato Kings', 'Boxing', 'finished', JSON.stringify(['Bot Echo -150', 'Bot Foxtrot +130'])],
+    [4, 'Minneapolis Northstars vs San Diego Sun Rays', 'Curling', 'upcoming', JSON.stringify(['Bot Golf -2', 'Bot Hotel +2'])]
   ];
 
   const gameStmt = db.prepare(
