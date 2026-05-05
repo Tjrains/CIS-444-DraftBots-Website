@@ -20,10 +20,9 @@ const db = new sqlite3.Database(dbPath);
 
 // ============================================================================
 // Promise wrappers for sqlite3.
-// The lifecycle code below has nested DB calls (load game -> load bets ->
-// update each bet -> credit user -> insert transaction). Doing that with raw
-// callbacks turns into a pyramid; promises let us write it as a clean
-// sequential async function.
+// The lifecycle has nested DB calls (load game -> load bets -> update each
+// bet -> credit user -> insert transaction). Doing that with raw callbacks
+// turns into a pyramid; promises let us write clean sequential async funcs.
 // ============================================================================
 const dbAll = (sql, params = []) => new Promise((resolve, reject) => {
   db.all(sql, params, (err, rows) => err ? reject(err) : resolve(rows));
@@ -38,26 +37,48 @@ const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
 // ============================================================================
 // GAME LIFECYCLE
 // ----------------------------------------------------------------------------
-// On boot, schedule one game to go live in 5 min and finish 5 min after that.
-// When it finishes, we generate a sport-appropriate score, resolve every
-// pending bet on that game, then loop into the next game after a short gap.
+// On boot we set up a fresh demo state with all 4 games concurrently:
+//   slot 1: finished (id=1, with a real score from the seed)
+//   slot 2: live, 30 min remaining (id=2)
+//   slot 3: 5-min demo - starts in 5 min, ends in 10 min (id=3)
+//   slot 4: regular - starts in 1 hr, ends in 2 hr (id=4)
+//
+// When a game finishes:
+//   * its bets are resolved against the generated score
+//   * if there are now 2+ finished games, the OLDEST is deleted and a
+//     replacement upcoming game is created with the same teams in a
+//     different sport (regular 1-hour cycle)
+//
+// This guarantees: at most 1 finished game and at least 2 bettable games
+// visible at any time.
 // ============================================================================
 
-const START_DELAY_MS   = 5 * 60 * 1000;  // boot -> game starts (bets close)
-const GAME_DURATION_MS = 5 * 60 * 1000;  // game runs for this long
-const GAP_BETWEEN_MS   = 60 * 1000;      // gap between cycles
+const FIVE_MIN   = 5  * 60 * 1000;
+const THIRTY_MIN = 30 * 60 * 1000;
+const ONE_HOUR   = 60 * 60 * 1000;
+const TWO_HOURS  = 2  * ONE_HOUR;
+
+// Demo slot timing. Kept tight so the user can see the bet-and-payout
+// flow within ~2.5 min of server boot.
+const DEMO_START_DELAY_MS = 2 * 60 * 1000; // game starts 2 min after boot
+const DEMO_DURATION_MS    = 30 * 1000;     // game lasts 30 sec
+const DEMO_END_DELAY_MS   = DEMO_START_DELAY_MS + DEMO_DURATION_MS;
 
 // Realistic-ish score ranges per sport. Adjust to taste.
 const SCORE_RANGES = {
-  Football: { home: [10, 38], away: [10, 38] },
-  Soccer:   { home: [0, 4],   away: [0, 4]   },
-  Boxing:   { home: [0, 12],  away: [0, 12]  },
-  Curling:  { home: [3, 10],  away: [3, 10]  }
+  Football:   { home: [10, 38], away: [10, 38] },
+  Basketball: { home: [88, 122], away: [88, 122] },
+  Hockey:     { home: [0, 6],   away: [0, 6]   },
+  Baseball:   { home: [0, 9],   away: [0, 9]   },
+  Soccer:     { home: [0, 4],   away: [0, 4]   },
+  Boxing:     { home: [0, 12],  away: [0, 12]  },
+  Curling:    { home: [3, 10],  away: [3, 10]  }
 };
 
-function randInt(lo, hi) {
-  return Math.floor(Math.random() * (hi - lo + 1)) + lo;
-}
+const ALL_SPORTS = Object.keys(SCORE_RANGES);
+
+function randInt(lo, hi) { return Math.floor(Math.random() * (hi - lo + 1)) + lo; }
+function randPick(arr)   { return arr[Math.floor(Math.random() * arr.length)]; }
 
 function generateScore(sport) {
   const range = SCORE_RANGES[sport] || { home: [0, 50], away: [0, 50] };
@@ -67,13 +88,11 @@ function generateScore(sport) {
   };
 }
 
-// Hybrid resolution: spreads & totals are decided by the score; moneyline
-// (and anything we can't structurally identify) falls back to a 50/50 coin
-// flip per the design choice.
+// Hybrid resolution: spreads & totals decided by the score; moneyline (and
+// anything we can't structurally identify) falls back to a 50/50 coin flip.
 function determineOutcome(pickLabel, gameBetDefs, homeScore, awayScore) {
   const def = (gameBetDefs || []).find(b => b && b.label === pickLabel);
   if (!def) {
-    // Old/unstructured bet definition - we can't parse it, so coin-flip it.
     return Math.random() < 0.5 ? 'won' : 'lost';
   }
 
@@ -85,63 +104,74 @@ function determineOutcome(pickLabel, gameBetDefs, homeScore, awayScore) {
   }
 
   if (def.type === 'spread') {
-    // "home -3.5" wins if (home - away) > 3.5 -> margin + line > 0
-    // "away +3.5" wins if (away - home) > -3.5 -> margin + line > 0
+    // home -3.5 wins if (home - away) > 3.5  -> margin + line > 0
+    // away +3.5 wins if (away - home) > -3.5 -> margin + line > 0
     const margin = def.side === 'home'
       ? (homeScore - awayScore)
       : (awayScore - homeScore);
     return (margin + def.line) > 0 ? 'won' : 'lost';
   }
 
-  // moneyline / props / unknown -> random per design
+  // moneyline / props / unknown -> random per design choice
   return Math.random() < 0.5 ? 'won' : 'lost';
 }
 
-// Pick the next game to put through the lifecycle. We prefer one that's
-// already 'upcoming' (so on a fresh boot the existing Curling game runs
-// first), and otherwise recycle a finished game.
-async function pickNextGame() {
-  let game = await dbGet(
-    `SELECT * FROM games WHERE status = 'upcoming' ORDER BY id ASC LIMIT 1`
-  );
-  if (game) return game;
+// Build a fresh set of structured bets for a sport between two teams.
+function generateBetsForSport(home, away, sport) {
+  const lineConfig = {
+    Football:   { spread: [3, 6.5, 7, 10], total: [42, 45, 48] },
+    Basketball: { spread: [3, 6, 8, 10],   total: [210, 220, 225] },
+    Hockey:     { spread: [1, 1.5, 2],     total: [5.5, 6, 6.5] },
+    Baseball:   { spread: [1, 1.5, 2],     total: [7.5, 8, 9] },
+    Soccer:     { spread: [0.5, 1, 1.5],   total: [2.5, 3] },
+    Curling:    { spread: [1, 2, 3],       total: [12, 14] }
+  };
 
-  game = await dbGet(
-    `SELECT * FROM games WHERE status = 'finished' ORDER BY id ASC LIMIT 1`
-  );
-  return game;
+  // Boxing is moneyline-only.
+  if (sport === 'Boxing' || !lineConfig[sport]) {
+    return [
+      { label: `${home} -150`, type: 'moneyline', side: 'home', odds: -150 },
+      { label: `${away} +130`, type: 'moneyline', side: 'away', odds:  130 }
+    ];
+  }
+
+  const cfg    = lineConfig[sport];
+  const spread = randPick(cfg.spread);
+  const total  = randPick(cfg.total);
+
+  return [
+    { label: `${home} -${spread}`, type: 'spread', side: 'home', line: -spread, odds: -110 },
+    { label: `${away} +${spread}`, type: 'spread', side: 'away', line:  spread, odds: -110 },
+    { label: `Over ${total}`,      type: 'total',  direction: 'over',  line: total, odds: -110 },
+    { label: `Under ${total}`,     type: 'total',  direction: 'under', line: total, odds: -110 }
+  ];
 }
 
-async function startNextGame() {
-  try {
-    const game = await pickNextGame();
-    if (!game) {
-      console.log('[lifecycle] No games available to run.');
-      return;
-    }
+// ----- timer registry -----
+// One game can have a go-live timer + an end-game timer at the same time.
+// Keep a registry so re-scheduling on boot can cancel previous ones.
+const activeTimers = new Map(); // gameId -> { goLive, endGame }
 
-    const now = Date.now();
-    const startTime = new Date(now + START_DELAY_MS).toISOString();
-    const endTime   = new Date(now + START_DELAY_MS + GAME_DURATION_MS).toISOString();
-
-    await dbRun(
-      `UPDATE games
-          SET status = 'upcoming',
-              start_time = ?,
-              end_time   = ?,
-              home_score = NULL,
-              away_score = NULL
-        WHERE id = ?`,
-      [startTime, endTime, game.id]
-    );
-
-    console.log(`[lifecycle] ${game.name} -> upcoming. Locks ${startTime}, ends ${endTime}.`);
-
-    setTimeout(() => goLive(game.id).catch(console.error), START_DELAY_MS);
-    setTimeout(() => endGame(game.id).catch(console.error), START_DELAY_MS + GAME_DURATION_MS);
-  } catch (err) {
-    console.error('[lifecycle] startNextGame failed:', err);
+function cancelAllTimers() {
+  for (const t of activeTimers.values()) {
+    if (t.goLive)  clearTimeout(t.goLive);
+    if (t.endGame) clearTimeout(t.endGame);
   }
+  activeTimers.clear();
+}
+
+function scheduleGoLive(gameId, delayMs) {
+  if (!activeTimers.has(gameId)) activeTimers.set(gameId, {});
+  const t = activeTimers.get(gameId);
+  if (t.goLive) clearTimeout(t.goLive);
+  t.goLive = setTimeout(() => goLive(gameId).catch(console.error), Math.max(0, delayMs));
+}
+
+function scheduleEndGame(gameId, delayMs) {
+  if (!activeTimers.has(gameId)) activeTimers.set(gameId, {});
+  const t = activeTimers.get(gameId);
+  if (t.endGame) clearTimeout(t.endGame);
+  t.endGame = setTimeout(() => endGame(gameId).catch(console.error), Math.max(0, delayMs));
 }
 
 async function goLive(gameId) {
@@ -165,7 +195,7 @@ async function endGame(gameId) {
     [score.home, score.away, gameId]
   );
 
-  console.log(`[lifecycle] ${game.name} FINISHED  ${score.home} - ${score.away}.`);
+  console.log(`[lifecycle] ${game.name} FINISHED ${score.home} - ${score.away}.`);
 
   // Resolve every bet on this game that's still open.
   let betDefs = [];
@@ -196,12 +226,67 @@ async function endGame(gameId) {
     }
   }
 
-  // Loop into the next cycle after a short gap.
-  setTimeout(() => startNextGame().catch(console.error), GAP_BETWEEN_MS);
+  // This game's timers are done - drop them from the registry.
+  activeTimers.delete(gameId);
+
+  // Enforce the at-most-1-finished rule.
+  await enforceFinishedLimit();
 }
 
-// Make sure the new columns exist even if someone hasn't re-run init-db
-// (Render's persistent disk keeps the old DB file around between deploys).
+// If 2+ games are finished, delete the oldest one and create a replacement
+// upcoming game between its same two teams in a different sport.
+async function enforceFinishedLimit() {
+  const finished = await dbAll(
+    // Put NULL end_times first (they're effectively the oldest), then
+    // earliest end_time. SQLite doesn't have NULLS FIRST so we fake it.
+    `SELECT * FROM games
+       WHERE status = 'finished'
+       ORDER BY (end_time IS NULL) DESC, end_time ASC`
+  );
+
+  if (finished.length < 2) return;
+
+  const oldest = finished[0];
+  await dbRun(`DELETE FROM games WHERE id = ?`, [oldest.id]);
+  console.log(`[lifecycle] Removed oldest finished game: ${oldest.name} (${oldest.sport}).`);
+
+  // Replace with a new upcoming game between the same two teams in a
+  // different sport. Regular 1-hour cycle.
+  const [home, away] = (oldest.name || '').split(' vs ');
+  const candidates = ALL_SPORTS.filter(s => s !== oldest.sport);
+  const newSport = randPick(candidates) || 'Soccer';
+  const newBets  = generateBetsForSport(home || 'Home', away || 'Away', newSport);
+
+  const maxRow = await dbGet(`SELECT MAX(id) AS max FROM games`);
+  const newId  = (maxRow && maxRow.max ? maxRow.max : 0) + 1;
+
+  const now = Date.now();
+  const startDelayMs = FIVE_MIN;          // start in 5 min
+  const endDelayMs   = startDelayMs + ONE_HOUR; // 1-hour duration
+
+  await dbRun(
+    `INSERT INTO games (id, name, sport, status, bets, start_time, end_time)
+     VALUES (?, ?, ?, 'upcoming', ?, ?, ?)`,
+    [
+      newId,
+      oldest.name,
+      newSport,
+      JSON.stringify(newBets),
+      new Date(now + startDelayMs).toISOString(),
+      new Date(now + endDelayMs).toISOString()
+    ]
+  );
+
+  scheduleGoLive(newId, startDelayMs);
+  scheduleEndGame(newId, endDelayMs);
+
+  console.log(`[lifecycle] Replacement created: ${oldest.name} now playing ${newSport} (id=${newId}, starts in 5 min).`);
+}
+
+// ----- boot -----
+// Always reset to the demo state on every server boot.
+// Render's free tier spins the server down after idle, so each "real" boot
+// gives a user a fresh 5-min demo window to bet+payout in.
 async function ensureSchema() {
   const cols = await dbAll(`PRAGMA table_info(games)`);
   const have = new Set(cols.map(c => c.name));
@@ -217,13 +302,124 @@ async function ensureSchema() {
 async function bootLifecycle() {
   try {
     await ensureSchema();
+    cancelAllTimers();
 
-    // Any game still marked 'live' is orphaned from a previous server run -
-    // there's no setTimeout pointing at it anymore. Mark it finished so it
-    // doesn't show as live forever in the UI.
-    await dbRun(`UPDATE games SET status = 'finished' WHERE status = 'live'`);
+    const games = await dbAll(`SELECT * FROM games ORDER BY id ASC`);
+    if (games.length === 0) {
+      console.log('[lifecycle] No games in DB. Run `npm run init-db` first.');
+      return;
+    }
 
-    await startNextGame();
+    const now = Date.now();
+
+    // Slot assignment: pick the first existing finished game (or game 1) as
+    // the "already finished" slot, then walk the rest as live / demo /
+    // regular(s).
+    let finished = null;
+    let live = null;
+    let demo = null;
+    const regulars = [];
+
+    for (const g of games) {
+      if (!finished && (g.status === 'finished' || g.home_score != null)) {
+        finished = g;
+      } else if (!live)  live = g;
+      else if (!demo)    demo = g;
+      else               regulars.push(g);
+    }
+    // Fallback if nothing was already finished: take the first game.
+    if (!finished && games.length > 0) {
+      finished = games[0];
+      live = null; demo = null; regulars.length = 0;
+      for (let i = 1; i < games.length; i++) {
+        if (!live)  { live = games[i]; continue; }
+        if (!demo)  { demo = games[i]; continue; }
+        regulars.push(games[i]);
+      }
+    }
+
+    // Slot 1: finished. Make sure it has a score and an end_time so the
+    // "remove oldest finished" logic can sort by end_time later.
+    if (finished) {
+      let homeScore = finished.home_score;
+      let awayScore = finished.away_score;
+      if (homeScore == null || awayScore == null) {
+        const s = generateScore(finished.sport);
+        homeScore = s.home; awayScore = s.away;
+      }
+      const finishedEndTime = new Date(now - ONE_HOUR).toISOString();
+      await dbRun(
+        `UPDATE games
+            SET status = 'finished',
+                home_score = ?,
+                away_score = ?,
+                end_time = ?
+          WHERE id = ?`,
+        [homeScore, awayScore, finishedEndTime, finished.id]
+      );
+      console.log(`[lifecycle] Slot 1 FINISHED: ${finished.name} (${finished.sport}) ${homeScore}-${awayScore}.`);
+    }
+
+    // Slot 2: live, 30 min remaining.
+    if (live) {
+      const startTime = new Date(now - THIRTY_MIN).toISOString(); // started 30 min ago
+      const endTime   = new Date(now + THIRTY_MIN).toISOString(); // ends in 30 min
+      await dbRun(
+        `UPDATE games
+            SET status = 'live',
+                start_time = ?,
+                end_time   = ?,
+                home_score = NULL,
+                away_score = NULL
+          WHERE id = ?`,
+        [startTime, endTime, live.id]
+      );
+      scheduleEndGame(live.id, THIRTY_MIN);
+      console.log(`[lifecycle] Slot 2 LIVE: ${live.name} (${live.sport}), ends in 30 min.`);
+    }
+
+    // Slot 3: short demo. Starts in 2 min, lasts 30 sec (ends 2.5 min from boot).
+    if (demo) {
+      const startTime = new Date(now + DEMO_START_DELAY_MS).toISOString();
+      const endTime   = new Date(now + DEMO_END_DELAY_MS).toISOString();
+      await dbRun(
+        `UPDATE games
+            SET status = 'upcoming',
+                start_time = ?,
+                end_time   = ?,
+                home_score = NULL,
+                away_score = NULL
+          WHERE id = ?`,
+        [startTime, endTime, demo.id]
+      );
+      scheduleGoLive(demo.id,  DEMO_START_DELAY_MS);
+      scheduleEndGame(demo.id, DEMO_END_DELAY_MS);
+      console.log(`[lifecycle] Slot 3 DEMO: ${demo.name} (${demo.sport}), starts in 2 min, lasts 30 sec.`);
+    }
+
+    // Slot 4+: regular upcoming games. Stagger start times so they don't
+    // all fire at once (first one in 1 hr, then +30 min each after that).
+    for (let i = 0; i < regulars.length; i++) {
+      const g = regulars[i];
+      const startDelayMs = ONE_HOUR + i * THIRTY_MIN;
+      const endDelayMs   = startDelayMs + ONE_HOUR;
+      const startTime = new Date(now + startDelayMs).toISOString();
+      const endTime   = new Date(now + endDelayMs).toISOString();
+      await dbRun(
+        `UPDATE games
+            SET status = 'upcoming',
+                start_time = ?,
+                end_time   = ?,
+                home_score = NULL,
+                away_score = NULL
+          WHERE id = ?`,
+        [startTime, endTime, g.id]
+      );
+      scheduleGoLive(g.id,  startDelayMs);
+      scheduleEndGame(g.id, endDelayMs);
+      const minsToStart = Math.round(startDelayMs / 60000);
+      console.log(`[lifecycle] Slot ${4 + i} REGULAR: ${g.name} (${g.sport}), starts in ${minsToStart} min.`);
+    }
   } catch (err) {
     console.error('[lifecycle] boot failed:', err);
   }
@@ -308,12 +504,19 @@ app.get('/api/bets', (req, res) => {
   );
 });
 
-// GAMES — now returns lifecycle timestamps and final scores
+// GAMES — returns lifecycle timestamps and final scores
 app.get('/api/games', (req, res) => {
   db.all(
     `SELECT id, name, sport, status, bets, start_time, end_time, home_score, away_score
        FROM games
-      ORDER BY id ASC`,
+      ORDER BY
+        CASE status
+          WHEN 'live'     THEN 0
+          WHEN 'upcoming' THEN 1
+          WHEN 'finished' THEN 2
+          ELSE 3
+        END,
+        id ASC`,
     (err, rows) => {
       if (err) {
         console.error(err);
@@ -437,8 +640,8 @@ app.post('/api/place-bet', (req, res) => {
           if (game.status !== 'upcoming') {
             return res.status(400).json({ error: 'Bets are only allowed on upcoming games.' });
           }
-          // Defensive: even if the status flip hasn't fired yet, refuse bets
-          // placed at/after the scheduled lock time.
+          // Defensive: refuse any bet placed at or after the scheduled lock
+          // time, even if the status flip hasn't fired yet.
           if (game.start_time && Date.now() >= new Date(game.start_time).getTime()) {
             return res.status(400).json({ error: 'Betting has closed for this game.' });
           }
@@ -458,7 +661,6 @@ app.post('/api/place-bet', (req, res) => {
             betDef = validPicks.find(b => b.label === pick);
             if (!betDef) return res.status(400).json({ error: 'Invalid pick for this game.' });
           } else {
-            // legacy data path
             if (!validPicks.includes(pick)) {
               return res.status(400).json({ error: 'Invalid pick for this game.' });
             }
