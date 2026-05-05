@@ -51,13 +51,18 @@ db.serialize(() => {
     )
   `);
 
+  // games table tracks the lifecycle (start/end times) and the final score
   db.run(`
     CREATE TABLE games (
       id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
       sport TEXT NOT NULL,
       status TEXT NOT NULL,
-      bets TEXT NOT NULL
+      bets TEXT NOT NULL,
+      start_time TEXT,
+      end_time   TEXT,
+      home_score INTEGER,
+      away_score INTEGER
     )
   `);
 
@@ -80,10 +85,10 @@ db.serialize(() => {
   txStmt.finalize();
 
   const bets = [
-    ['Austin Armadillos vs Portland Stormchasers', 'Football', 'Austin Armadillos -3.5', 20, -110, 40.00, 'won', '2026-04-10'],
-    ['El Paso Desert Wolves vs Boise Potato Kings', 'Boxing', 'Boise Potato Kings +130', 15, 130, 15.00, 'lost', '2026-04-11'],
-    ['Minneapolis Northstars vs San Diego Sun Rays', 'Curling', 'Minneapolis Northstars -2', 25, -115, 46.74, 'pending', '2026-04-14'],
-    ['Nashville High Notes vs New York Empire', 'Soccer', 'Over 2.5 Goals', 10, -105, 19.52, 'live', '2026-04-14']
+    ['Austin Armadillos vs Portland Stormchasers',  'Football', 'Austin Armadillos -3.5',    20, -110, 40.00, 'won',     '2026-04-10'],
+    ['El Paso Desert Wolves vs Boise Potato Kings', 'Boxing',   'Boise Potato Kings +130',   15,  130, 15.00, 'lost',    '2026-04-11'],
+    ['Minneapolis Northstars vs San Diego Sun Rays','Curling',  'Minneapolis Northstars -2', 25, -115, 46.74, 'pending', '2026-04-14'],
+    ['Nashville High Notes vs New York Empire',     'Soccer',   'Over 2.5 Goals',            10, -105, 19.52, 'live',    '2026-04-14']
   ];
 
   const betStmt = db.prepare(`
@@ -93,11 +98,41 @@ db.serialize(() => {
   bets.forEach(bet => betStmt.run(1, ...bet));
   betStmt.finalize();
 
+  // Bets are structured objects so the lifecycle code can resolve them
+  // automatically against a generated score:
+  //   label     - what the user sees and what gets stored as "pick"
+  //   type      - 'spread' | 'total' | 'moneyline'
+  //   side      - 'home' | 'away'  (for spread / moneyline; first team in
+  //                                  the game name = home)
+  //   direction - 'over' | 'under' (for totals)
+  //   line      - the spread or total line
+  //   odds      - American odds for this bet
   const games = [
-    [1, 'Austin Armadillos vs Portland Stormchasers', 'Football', 'finished', JSON.stringify(['Austin Armadillos -3.5', 'Portland Stormchasers +3.5', 'Over 42.5', 'Under 42.5'])],
-    [2, 'Nashville High Notes vs New York Empire', 'Soccer', 'live', JSON.stringify([])],
-    [3, 'El Paso Desert Wolves vs Boise Potato Kings', 'Boxing', 'finished', JSON.stringify(['El Paso Desert Wolves -150', 'Boise Potato Kings +130'])],
-    [4, 'Minneapolis Northstars vs San Diego Sun Rays', 'Curling', 'upcoming', JSON.stringify(['Minneapolis Northstars -2', 'San Diego Sun Rays +2'])]
+    [1, 'Austin Armadillos vs Portland Stormchasers', 'Football', 'finished',
+      JSON.stringify([
+        { label: 'Austin Armadillos -3.5',     type: 'spread', side: 'home', line: -3.5, odds: -110 },
+        { label: 'Portland Stormchasers +3.5', type: 'spread', side: 'away', line:  3.5, odds: -110 },
+        { label: 'Over 42.5',                  type: 'total',  direction: 'over',  line: 42.5, odds: -110 },
+        { label: 'Under 42.5',                 type: 'total',  direction: 'under', line: 42.5, odds: -110 }
+      ])
+    ],
+    [2, 'Nashville High Notes vs New York Empire', 'Soccer', 'live',
+      JSON.stringify([])
+    ],
+    [3, 'El Paso Desert Wolves vs Boise Potato Kings', 'Boxing', 'finished',
+      JSON.stringify([
+        { label: 'El Paso Desert Wolves -150', type: 'moneyline', side: 'home', odds: -150 },
+        { label: 'Boise Potato Kings +130',    type: 'moneyline', side: 'away', odds:  130 }
+      ])
+    ],
+    // Curling stays "upcoming" - this is the game the lifecycle picks up
+    // first on a fresh server boot.
+    [4, 'Minneapolis Northstars vs San Diego Sun Rays', 'Curling', 'upcoming',
+      JSON.stringify([
+        { label: 'Minneapolis Northstars -2', type: 'spread', side: 'home', line: -2, odds: -115 },
+        { label: 'San Diego Sun Rays +2',     type: 'spread', side: 'away', line:  2, odds: -115 }
+      ])
+    ]
   ];
 
   const gameStmt = db.prepare(
