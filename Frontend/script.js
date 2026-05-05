@@ -10,14 +10,14 @@ let games = [];
 
 // --- Sample team data ---
 const teams = [
-  { name: "Austin Armadillos", city: "Austin", logo: "Austin.png", offense: 88, defense: 74 },
-  { name: "Portland Stormchasers", city: "Portland", logo: "Portland.png", offense: 65, defense: 91 },
-  { name: "Nashville High Notes", city: "Nashville", logo: "Nashville.png", offense: 79, defense: 80 },
-  { name: "New York Empire", city: "New York", logo: "New_York.png", offense: 83, defense: 68 },
-  { name: "El Paso Desert Wolves", city: "El Paso", logo: "El_Paso.png", offense: 92, defense: 55 },
-  { name: "Boise Potato Kings", city: "Boise", logo: "Boise.png", offense: 60, defense: 87 },
-  { name: "Minneapolis Northstars", city: "Minneapolis", logo: "Minneapolis.png", offense: 71, defense: 76 },
-  { name: "San Diego Sun Rays", city: "San Diego", logo: "San_Diego.png", offense: 77, defense: 82 }
+  { name: "Austin Armadillos", city: "Austin", logo: "images/Austin.png", offense: 88, defense: 74 },
+  { name: "Portland Stormchasers", city: "Portland", logo: "images/Portland.png", offense: 65, defense: 91 },
+  { name: "Nashville High Notes", city: "Nashville", logo: "images/Nashville.png", offense: 79, defense: 80 },
+  { name: "New York Empire", city: "New York", logo: "images/New_York.png", offense: 83, defense: 68 },
+  { name: "El Paso Desert Wolves", city: "El Paso", logo: "images/El_Paso.png", offense: 92, defense: 55 },
+  { name: "Boise Potato Kings", city: "Boise", logo: "images/Boise.png", offense: 60, defense: 87 },
+  { name: "Minneapolis Northstars", city: "Minneapolis", logo: "images/Minneapolis.png", offense: 71, defense: 76 },
+  { name: "San Diego Sun Rays", city: "San Diego", logo: "images/San_Diego.png", offense: 77, defense: 82 }
 ];
 
 const API =
