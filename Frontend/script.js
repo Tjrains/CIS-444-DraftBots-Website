@@ -10,14 +10,14 @@ let games = [];
 
 // --- Sample team data ---
 const teams = [
-  { name: "Bot Alpha", offense: 88, defense: 74 },
-  { name: "Bot Bravo", offense: 65, defense: 91 },
-  { name: "Bot Charlie", offense: 79, defense: 80 },
-  { name: "Bot Delta", offense: 83, defense: 68 },
-  { name: "Bot Echo", offense: 92, defense: 55 },
-  { name: "Bot Foxtrot", offense: 60, defense: 87 },
-  { name: "Bot Golf", offense: 71, defense: 76 },
-  { name: "Bot Hotel", offense: 77, defense: 82 }
+  { name: "Austin Armadillos", city: "Austin", logo: "Austin.webp", offense: 88, defense: 74 },
+  { name: "Portland Stormchasers", city: "Portland", logo: "Portland.webp", offense: 65, defense: 91 },
+  { name: "Nashville High Notes", city: "Nashville", logo: "Nashville.webp", offense: 79, defense: 80 },
+  { name: "New York Empire", city: "New York", logo: "New_York.webp", offense: 83, defense: 68 },
+  { name: "El Paso Desert Wolves", city: "El Paso", logo: "El_Paso.webp", offense: 92, defense: 55 },
+  { name: "Boise Potato Kings", city: "Boise", logo: "Boise.webp", offense: 60, defense: 87 },
+  { name: "Minneapolis Northstars", city: "Minneapolis", logo: "Minneapolis.webp", offense: 71, defense: 76 },
+  { name: "San Diego Sun Rays", city: "San Diego", logo: "San_Diego.webp", offense: 77, defense: 82 }
 ];
 
 const API =
@@ -160,6 +160,9 @@ function loadTeams() {
     const card = document.createElement("div");
     card.className = "team-card";
     card.innerHTML = `
+      <div class="team-logo-wrap">
+        <img class="team-logo" src="${team.logo}" alt="${team.name} logo" />
+      </div>  
       <h3>${team.name}</h3>
       <p class="team-stat">Offense: <span>${team.offense}</span></p>
       <p class="team-stat">Defense: <span>${team.defense}</span></p>
