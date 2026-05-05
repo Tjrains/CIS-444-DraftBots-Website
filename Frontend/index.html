@@ -11,6 +11,7 @@
 </head>
 <body>
 
+  <!-- HEADER -->
   <header>
   <div class="logo">
     <span class="logo-icon">✓✓</span>
@@ -31,6 +32,7 @@
   </div>
 </header>
 
+  <!-- NAVIGATION TABS -->
   <nav>
     <button class="tab active" onclick="openTab('schedule', this)">Schedule</button>
     <button class="tab" onclick="openTab('teams', this)">Teams</button>
@@ -40,11 +42,13 @@
 
   <main>
 
+    <!-- SCHEDULE TAB -->
     <section id="schedule" class="tab-content active">
       <h2 class="section-title">Upcoming Games</h2>
       <div id="gameList" class="game-grid"></div>
     </section>
 
+    <!-- GAME DETAIL VIEW -->
     <section id="gameDetails" class="tab-content hidden">
       <button class="back-btn" onclick="goBack()">← Back to Schedule</button>
       <h2 id="gameTitle" class="section-title"></h2>
@@ -52,11 +56,13 @@
       <div id="gameContent" class="game-content"></div>
     </section>
 
+    <!-- TEAMS TAB -->
     <section id="teams" class="tab-content">
       <h2 class="section-title">Teams</h2>
       <div id="teamGrid" class="team-grid"></div>
     </section>
 
+    <!-- MY BETS TAB -->
     <section id="bets" class="tab-content">
       <h2 class="section-title">My Bets</h2>
       <div id="betsList">
@@ -64,6 +70,7 @@
       </div>
     </section>
 
+    <!-- PROFILE TAB -->
     <section id="profile" class="tab-content">
       <h2 class="section-title">Profile</h2>
       <div class="profile-card">
@@ -93,6 +100,7 @@
   </main>
 
 
+  <!-- BETS PLACEMENT MODAL -->
   <div id="betModal" class="modal-overlay hidden">
     <div class="modal">
       <button class="modal-close" onclick="closeBetModal()">×</button>
