@@ -40,7 +40,7 @@ const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
 // On boot we set up a fresh demo state with all 4 games concurrently:
 //   slot 1: finished (id=1, with a real score from the seed)
 //   slot 2: live, 30 min remaining (id=2)
-//   slot 3: 5-min demo - starts in 5 min, ends in 10 min (id=3)
+//   slot 3: 2.5-min demo - starts in 2 min, ends in 30 sec (id=3)
 //   slot 4: regular - starts in 1 hr, ends in 2 hr (id=4)
 //
 // When a game finishes:
@@ -60,8 +60,8 @@ const TWO_HOURS  = 2  * ONE_HOUR;
 
 // Demo slot timing. Kept tight so the user can see the bet-and-payout
 // flow within ~6 min of server boot.
-const DEMO_START_DELAY_MS = 5 * 60 * 1000; // game starts 5 min after boot
-const DEMO_DURATION_MS    = 60 * 1000;     // game lasts 1 min
+const DEMO_START_DELAY_MS = 2 * 60 * 1000; // game starts 2 min after boot
+const DEMO_DURATION_MS    = 30 * 1000;     // game lasts 30 sec
 const DEMO_END_DELAY_MS   = DEMO_START_DELAY_MS + DEMO_DURATION_MS;
 
 // Realistic-ish score ranges per sport. Adjust to taste.
@@ -381,7 +381,7 @@ async function bootLifecycle() {
       console.log(`[lifecycle] Slot 2 LIVE: ${live.name} (${live.sport}), ends in 30 min.`);
     }
 
-    // Slot 3: short demo. Starts in 5 min, lasts 1 min (ends 6 min from boot).
+    // Slot 3: short demo. Starts in 2.5 min, lasts 30 sec (ends 2.5 min from boot).
     if (demo) {
       const startTime = new Date(now + DEMO_START_DELAY_MS).toISOString();
       const endTime   = new Date(now + DEMO_END_DELAY_MS).toISOString();
